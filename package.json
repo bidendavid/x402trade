@@ -1,0 +1,33 @@
+{
+  "name": "x402trade",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Agent Exchange (x402Trade) - backend monorepo",
+  "workspaces": [
+    "services/*",
+    "contracts"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "jest --config services/order-engine/jest.config.js && jest --config services/x402-gateway/jest.config.js && jest --config services/risk-control/jest.config.js && npm test -w contracts",
+    "test:order-engine":  "jest --config services/order-engine/jest.config.js",
+    "test:gateway":       "jest --config services/x402-gateway/jest.config.js",
+    "test:risk-control":  "jest --config services/risk-control/jest.config.js",
+    "build": "npm run build -w services/x402-gateway && npm run build -w services/order-engine && npm run build -w services/wallet-service && npm run build -w services/oracle-service && npm run build -w services/risk-control && npm run build -w services/indexer-service && npm run build -w services/background-worker",
+    "dev:gateway": "npm run dev -w services/x402-gateway",
+    "stress-test": "ts-node --project tsconfig.base.json scripts/stress-test.ts"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.15.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.4.2",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

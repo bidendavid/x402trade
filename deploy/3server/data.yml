@@ -1,0 +1,88 @@
+# Server 3 (data) — PostgreSQL, Redis, Prometheus, Grafana
+# Same as 2server/data.yml — reuse it or symlink.
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: agent_exchange
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-agentpass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent_exchange"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --bind 0.0.0.0
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    deploy:
+      resources:
+        limits:
+          memory: 576M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ../../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "9090:9090"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,121 @@
+{
+  "title": "x402Trade Overview",
+  "uid": "x402trade-overview",
+  "schemaVersion": 38,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Request Rate (req/s)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "sum(rate(x402_http_requests_total[1m]))",
+        "legendFormat": "req/s"
+      }]
+    },
+    {
+      "id": 2, "type": "stat", "title": "p99 Latency (ms)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(x402_http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+        "legendFormat": "p99 ms"
+      }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Active WS Connections",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "x402_ws_connections_active",
+        "legendFormat": "connections"
+      }]
+    },
+    {
+      "id": 4, "type": "stat", "title": "x402 Payments (1m)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "sum(increase(x402_payments_total[1m]))",
+        "legendFormat": "payments"
+      }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "HTTP Request Rate by Route",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum(rate(x402_http_requests_total[1m])) by (route, method)",
+        "legendFormat": "{{method}} {{route}}"
+      }]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Latency Percentiles",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(x402_http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(x402_http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(x402_http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Order Match Duration (p95)",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(x402_order_match_duration_seconds_bucket[5m])) by (le)) * 1000",
+        "legendFormat": "p95 ms"
+      }]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "x402 Payment Results",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum(rate(x402_payments_total[1m])) by (result)",
+        "legendFormat": "{{result}}"
+      }]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "Error Rate (4xx/5xx)",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(x402_http_requests_total{status_code=~\"4..\"}[1m]))",
+          "legendFormat": "4xx"
+        },
+        {
+          "expr": "sum(rate(x402_http_requests_total{status_code=~\"5..\"}[1m]))",
+          "legendFormat": "5xx"
+        }
+      ]
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "Risk Rate Limited",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum(rate(x402_risk_rate_limited_total[1m]))",
+        "legendFormat": "blocked req/s"
+      }]
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "Node.js Memory (MB)",
+      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "x402_nodejs_heap_used_bytes / 1024 / 1024",
+        "legendFormat": "heap used MB"
+      }]
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "Event Loop Lag (ms)",
+      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "x402_nodejs_eventloop_lag_seconds * 1000",
+        "legendFormat": "lag ms"
+      }]
+    }
+  ]
+}

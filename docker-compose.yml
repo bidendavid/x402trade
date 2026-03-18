@@ -1,0 +1,192 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: agent_exchange
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agentpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent_exchange"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  nats:
+    image: nats:alpine
+    command: "-js -m 8222"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  order-engine:
+    build:
+      context: .
+      dockerfile: services/order-engine/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      DB_URL: postgresql://agent:agentpass@postgres:5432/agent_exchange
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      nats:     { condition: service_healthy }
+    restart: unless-stopped
+
+  wallet-service:
+    build:
+      context: .
+      dockerfile: services/wallet-service/Dockerfile
+    environment:
+      WALLET_PORT: 8082
+      DB_URL: postgresql://agent:agentpass@postgres:5432/agent_exchange
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      nats:     { condition: service_healthy }
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  oracle-service:
+    build:
+      context: .
+      dockerfile: services/oracle-service/Dockerfile
+    environment:
+      ORACLE_PORT: 8083
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis: { condition: service_healthy }
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8083/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  risk-control:
+    build:
+      context: .
+      dockerfile: services/risk-control/Dockerfile
+    environment:
+      RISK_PORT: 8084
+      DB_URL: postgresql://agent:agentpass@postgres:5432/agent_exchange
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      nats:     { condition: service_healthy }
+    ports:
+      - "8084:8084"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8084/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  x402-gateway:
+    build:
+      context: .
+      dockerfile: services/x402-gateway/Dockerfile
+    environment:
+      PORT: 8080
+      REDIS_URL: redis://redis:6379
+      DB_URL: postgresql://agent:agentpass@postgres:5432/agent_exchange
+      NATS_URL: nats://nats:4222
+      RISK_CONTROL_URL: http://risk-control:8084
+    depends_on:
+      postgres:     { condition: service_healthy }
+      redis:        { condition: service_healthy }
+      nats:         { condition: service_healthy }
+      risk-control: { condition: service_healthy }
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  indexer-service:
+    build:
+      context: .
+      dockerfile: services/indexer-service/Dockerfile
+    environment:
+      DB_URL: postgresql://agent:agentpass@postgres:5432/agent_exchange
+      BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - x402-gateway
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,46 @@
+# Environment variables — NEVER commit real credentials
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+build/
+**/build/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Hardhat artifacts & cache
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+
+# Logs
+*.log
+logs/
+**/logs/
+
+# Docker volumes (local data)
+postgres_data/
+redis_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Pencil design files (binary)
+*.pen
+
+# Internal spec & Claude instructions
+ai-agent-exchange-tech-spec.md
+CLAUDE.md

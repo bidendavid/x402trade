@@ -1,0 +1,31 @@
+# Server 1 (gateway) — x402-gateway only, horizontally scalable
+#
+# Usage:
+#   docker compose -f gateway.yml up -d
+#
+# To scale: run this file on multiple machines behind a load balancer.
+# Since gateway is stateless (state is in Redis/NATS), scaling is trivial.
+
+services:
+  x402-gateway:
+    image: ghcr.io/${GITHUB_REPO}/x402-gateway:latest
+    environment:
+      PORT: 8080
+      REDIS_URL: redis://${REDIS_HOST}:6379
+      DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
+      NATS_URL: nats://${ENGINE_HOST}:4222
+      RISK_CONTROL_URL: http://${ENGINE_HOST}:8083
+      X402_PAYMENT_ADDRESS: ${X402_PAYMENT_ADDRESS}
+    ports:
+      - "80:8080"
+      - "443:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

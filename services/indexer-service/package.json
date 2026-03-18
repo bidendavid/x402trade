@@ -1,0 +1,26 @@
+{
+  "name": "@x402trade/indexer-service",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.3",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.14"
+  }
+}
+

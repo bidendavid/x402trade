@@ -1,0 +1,74 @@
+# Server 2 (engine) — order-engine, wallet-service, background-worker, NATS
+#
+# Usage:
+#   docker compose -f engine.yml up -d
+
+services:
+  nats:
+    image: nats:alpine
+    command: "-js"
+    ports:
+      - "4222:4222"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  order-engine:
+    image: ghcr.io/${GITHUB_REPO}/order-engine:latest
+    environment:
+      REDIS_URL: redis://${REDIS_HOST}:6379
+      NATS_URL: nats://nats:4222
+      DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
+    depends_on:
+      nats: { condition: service_healthy }
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: unless-stopped
+
+  wallet-service:
+    image: ghcr.io/${GITHUB_REPO}/wallet-service:latest
+    environment:
+      WALLET_PORT: 8082
+      DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
+      REDIS_URL: redis://${REDIS_HOST}:6379
+      NATS_URL: nats://nats:4222
+      PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET}
+    depends_on:
+      nats: { condition: service_healthy }
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+  background-worker:
+    image: ghcr.io/${GITHUB_REPO}/background-worker:latest
+    environment:
+      BACKGROUND_PORT: 8083
+      REDIS_URL: redis://${REDIS_HOST}:6379
+      DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
+      NATS_URL: nats://nats:4222
+      BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
+    ports:
+      - "8083:8083"
+    depends_on:
+      nats: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8083/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped

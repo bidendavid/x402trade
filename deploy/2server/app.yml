@@ -1,0 +1,97 @@
+# Server 1 (app) — x402-gateway, order-engine, wallet-service, background-worker, NATS
+#
+# Usage on app server:
+#   cp ../../.env .env          (fill in DB_HOST, REDIS_HOST, etc.)
+#   docker compose -f app.yml up -d
+#
+# Required env vars in .env:
+#   DB_HOST      — IP of your data server
+#   REDIS_HOST   — IP of your data server
+#   X402_PAYMENT_ADDRESS — your USDC collection wallet
+
+services:
+  nats:
+    image: nats:alpine
+    command: "-js"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  order-engine:
+    image: ghcr.io/${GITHUB_REPO}/order-engine:latest
+    environment:
+      REDIS_URL: redis://${REDIS_HOST}:6379
+      NATS_URL: nats://nats:4222
+      DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
+    depends_on:
+      nats: { condition: service_healthy }
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  wallet-service:
+    image: ghcr.io/${GITHUB_REPO}/wallet-service:latest
+    environment:
+      WALLET_PORT: 8082
+      DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
+      REDIS_URL: redis://${REDIS_HOST}:6379
+      NATS_URL: nats://nats:4222
+      PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET}
+    depends_on:
+      nats: { condition: service_healthy }
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  background-worker:
+    image: ghcr.io/${GITHUB_REPO}/background-worker:latest
+    environment:
+      BACKGROUND_PORT: 8083
+      REDIS_URL: redis://${REDIS_HOST}:6379
+      DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
+      NATS_URL: nats://nats:4222
+      BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
+    depends_on:
+      nats: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8083/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  x402-gateway:
+    image: ghcr.io/${GITHUB_REPO}/x402-gateway:latest
+    environment:
+      PORT: 8080
+      REDIS_URL: redis://${REDIS_HOST}:6379
+      DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
+      NATS_URL: nats://nats:4222
+      RISK_CONTROL_URL: http://background-worker:8083
+      X402_PAYMENT_ADDRESS: ${X402_PAYMENT_ADDRESS}
+    depends_on:
+      nats:              { condition: service_healthy }
+      background-worker: { condition: service_healthy }
+    ports:
+      - "80:8080"
+      - "443:8080"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
