@@ -3,7 +3,7 @@ import { connect, NatsConnection, StringCodec } from 'nats';
 import { Order, Trade, OrderResult } from '../types';
 import { addToBook, removeFromBook, updateOrderStatus, getBestAsks, getBestBids, updatePriceCache } from './book';
 import { getPool } from '../lib/db';
-import { lockForBuy, lockForSell } from '../lib/balance';
+import { lockForBuy, lockForSell, unlockForCancel } from '../lib/balance';
 
 const FEE_RATE = 0.003; // 0.3%
 const sc = StringCodec();
@@ -61,6 +61,10 @@ export async function matchOrder(incoming: Order): Promise<OrderResult> {
 
   const incomingAgentId = await upsertAgent(incoming.agentWallet);
 
+  // Track what we locked so we can unlock excess on partial market fills
+  let lockedUsdc = '0';
+  let lockedEth = '0';
+
   // Lock funds before any fills — applies to both limit and market orders
   if (incoming.side === 'buy') {
     let lockPrice: string;
@@ -70,14 +74,17 @@ export async function matchOrder(incoming: Order): Promise<OrderResult> {
       // Market buy: lock at worst-case ask (first ask in book)
       const topAsks = await getBestAsks(incoming.pair, 1);
       if (topAsks.length === 0) {
+        incoming.status = 'cancelled';
+        await persistOrder(incoming, incomingAgentId);
         return { orderId: incoming.orderId, status: 'cancelled', filledAmount: '0', avgPrice: '0', trades: [] };
       }
       lockPrice = topAsks[0].price;
     }
-    const lockUsdc = (parseFloat(incoming.amount) * parseFloat(lockPrice)).toFixed(6);
-    await lockForBuy(incoming.agentWallet, lockUsdc);
+    lockedUsdc = (parseFloat(incoming.amount) * parseFloat(lockPrice)).toFixed(6);
+    await lockForBuy(incoming.agentWallet, lockedUsdc);
   } else {
     // Sell (limit or market): lock the ETH amount
+    lockedEth = incoming.amount;
     await lockForSell(incoming.agentWallet, incoming.amount);
   }
 
@@ -157,14 +164,34 @@ export async function matchOrder(incoming: Order): Promise<OrderResult> {
 
   // Update incoming order state
   incoming.filledAmount = totalFilled.toFixed(6);
-  incoming.status =
-    remaining <= 1e-9 ? 'filled' :
-    totalFilled > 0   ? 'partial' :
-                        'pending';
 
-  // Add unfilled limit order remainder to book
-  if (incoming.type === 'limit' && remaining > 1e-9) {
-    await addToBook(incoming);
+  if (incoming.type === 'market') {
+    // Market orders always terminate after one pass — they never rest in the book
+    incoming.status = remaining <= 1e-9 ? 'filled' : (totalFilled > 0 ? 'partial' : 'cancelled');
+
+    // Unlock over-locked funds for unfilled portion
+    if (remaining > 1e-9) {
+      if (incoming.side === 'buy' && parseFloat(lockedUsdc) > 0) {
+        // Unlock excess USDC: locked at worst-case price, actual cost = totalValue
+        const excessUsdc = parseFloat(lockedUsdc) - totalValue;
+        if (excessUsdc > 1e-9) {
+          await unlockForCancel(incoming.agentWallet, excessUsdc.toFixed(6), '0');
+        }
+      } else if (incoming.side === 'sell') {
+        // Unlock unfilled ETH amount
+        await unlockForCancel(incoming.agentWallet, '0', remaining.toFixed(6));
+      }
+    }
+  } else {
+    // Limit order: unfilled portion rests in book
+    incoming.status =
+      remaining <= 1e-9 ? 'filled' :
+      totalFilled > 0   ? 'partial' :
+                          'pending';
+
+    if (remaining > 1e-9) {
+      await addToBook(incoming);
+    }
   }
 
   // Update incoming order final state in DB

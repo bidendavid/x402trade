@@ -266,7 +266,7 @@ app.post('/check', async (req: Request, res: Response) => {
     if (score < 30)   { res.json({ allowed: false, reason: 'score_too_low', score }); return; }
     const ok = await checkRateLimit(wallet, score);
     res.json(ok ? { allowed: true, score } : { allowed: false, reason: 'rate_limited', score });
-  } catch { res.json({ allowed: true, score: 100 }); } // fail open
+  } catch (err) { console.error('[risk] /check error:', err); res.status(500).json({ allowed: false, reason: 'risk_service_error' }); }
 });
 
 app.post('/blacklist/:wallet', async (req: Request, res: Response) => {

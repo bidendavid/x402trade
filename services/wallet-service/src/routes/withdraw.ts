@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ethers } from 'ethers';
 import { getPool } from '../lib/db';
-import { getBalance, getOrCreateAgent } from '../lib/ledger';
+import { getOrCreateAgent } from '../lib/ledger';
 import { randomUUID } from 'crypto';
 
 const router = Router();
@@ -32,45 +32,54 @@ router.post('/withdraw', async (req: Request, res: Response) => {
     return;
   }
 
+  const requested = parseFloat(amount);
+  if (requested <= 0) {
+    res.status(400).json({ error: 'Amount must be positive' });
+    return;
+  }
+
   const pool = getPool();
 
   try {
-    const balance = await getBalance(wallet);
-    if (!balance) {
-      res.status(404).json({ error: 'Agent not found' });
-      return;
-    }
-
-    const available = parseFloat(balance.usdc_balance);
-    const requested = parseFloat(amount);
-
-    if (requested <= 0) {
-      res.status(400).json({ error: 'Amount must be positive' });
-      return;
-    }
-    if (requested > available) {
-      res.status(400).json({ error: 'Insufficient balance', available: balance.usdc_balance });
-      return;
-    }
-
     const agent = await getOrCreateAgent(wallet);
     const withdrawId = randomUUID();
+    const client = await pool.connect();
 
-    await pool.query('BEGIN');
     try {
-      await pool.query(
+      await client.query('BEGIN');
+
+      // Lock the balance row and check available funds atomically
+      const balanceResult = await client.query(
+        `SELECT b.usdc_balance FROM balances b WHERE b.agent_id = $1 FOR UPDATE`,
+        [agent.id]
+      );
+      if (balanceResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        res.status(404).json({ error: 'Agent balance not found' });
+        return;
+      }
+      const available = parseFloat(balanceResult.rows[0].usdc_balance as string);
+      if (requested > available) {
+        await client.query('ROLLBACK');
+        res.status(400).json({ error: 'Insufficient balance', available: available.toFixed(6) });
+        return;
+      }
+
+      await client.query(
         `UPDATE balances SET usdc_balance = usdc_balance - $1, updated_at = NOW() WHERE agent_id = $2`,
         [amount, agent.id]
       );
-      await pool.query(
+      await client.query(
         `INSERT INTO payments (payment_hash, agent_id, endpoint, amount, token_address, status)
          VALUES ($1, $2, 'withdraw', $3, $4, 'pending')`,
         [withdrawId, agent.id, amount, process.env.USDC_CONTRACT || '0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C']
       );
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
     } catch (err) {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK');
       throw err;
+    } finally {
+      client.release();
     }
 
     res.json({ success: true, withdrawId, wallet, amount, toAddress, status: 'pending' });

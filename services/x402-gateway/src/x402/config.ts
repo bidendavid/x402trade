@@ -30,6 +30,11 @@ export const x402Config: Record<string, EndpointConfig> = {
     accepts: ['base:usdc'],
     description: 'Get recent trades',
   },
+  'DELETE /orders': {
+    price: '0',
+    accepts: ['base:usdc'],
+    description: 'Cancel open order (free, requires wallet auth)',
+  },
 };
 
 export const USDC_CONTRACT = process.env.USDC_CONTRACT || '0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C';

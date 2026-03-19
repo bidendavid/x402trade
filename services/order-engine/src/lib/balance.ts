@@ -26,8 +26,7 @@ export async function lockForBuy(wallet: string, usdcAmount: string): Promise<vo
     [usdcAmount, wallet.toLowerCase()]
   );
   if ((result.rowCount ?? 0) === 0) {
-    // Insufficient balance — not a fatal error for market orders, just warn
-    console.warn(`[balance] Could not lock ${usdcAmount} USDC for ${wallet} (insufficient or agent not found)`);
+    throw new Error(`Insufficient USDC balance: cannot lock ${usdcAmount} USDC for ${wallet}`);
   }
   await invalidateCache(wallet);
 }
@@ -47,7 +46,7 @@ export async function lockForSell(wallet: string, ethAmount: string): Promise<vo
     [ethAmount, wallet.toLowerCase()]
   );
   if ((result.rowCount ?? 0) === 0) {
-    console.warn(`[balance] Could not lock ${ethAmount} ETH for ${wallet}`);
+    throw new Error(`Insufficient ETH balance: cannot lock ${ethAmount} ETH for ${wallet}`);
   }
   await invalidateCache(wallet);
 }

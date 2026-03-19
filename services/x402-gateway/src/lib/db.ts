@@ -14,8 +14,17 @@ export function getPool(): Pool {
 /**
  * Deduct API call fee from agent's internal USDC balance.
  * Returns true if deduction succeeded, false if insufficient balance or agent not found.
+ * If amount is '0', just verify the agent exists (used for free authenticated endpoints).
  */
 export async function deductApiPayment(walletAddress: string, amount: string): Promise<boolean> {
+  if (parseFloat(amount) === 0) {
+    // Free endpoint: verify agent exists without touching balances
+    const result = await getPool().query(
+      `SELECT 1 FROM agents WHERE wallet_address = $1`,
+      [walletAddress.toLowerCase()]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
   const result = await getPool().query(
     `UPDATE balances b
      SET usdc_balance = usdc_balance - $1,

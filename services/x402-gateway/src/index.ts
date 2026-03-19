@@ -4,6 +4,8 @@ import express, { Request, Response, NextFunction } from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import Redis from 'ioredis';
 import { x402Middleware } from './x402/middleware';
+import { verifyX402Payment, markNonceUsed } from './x402/verify';
+import { deductApiPayment } from './lib/db';
 import tradeRouter from './routes/trade';
 import orderbookRouter from './routes/orderbook';
 import ordersRouter from './routes/orders';
@@ -74,29 +76,64 @@ function broadcast(channel: string, data: unknown): void {
   if (sent > 0) wsMessagesTotal.inc({ channel: channel.split(':')[0] });
 }
 
-wss.on('connection', (ws: WebSocket) => {
-  wsConnectionsActive.inc();
-  const joined = new Set<string>();
+const WS_PRICE = '0.005'; // $0.005 per WebSocket connection
 
-  ws.on('message', (raw) => {
-    try {
-      const msg = JSON.parse(raw.toString()) as { type: string; channel: string };
-      if (msg.type === 'subscribe' && msg.channel) {
-        if (!subscribers.has(msg.channel)) subscribers.set(msg.channel, new Set());
-        subscribers.get(msg.channel)!.add(ws);
-        joined.add(msg.channel);
-        ws.send(JSON.stringify({ type: 'subscribed', channel: msg.channel }));
-      } else if (msg.type === 'unsubscribe' && msg.channel) {
-        subscribers.get(msg.channel)?.delete(ws);
-        joined.delete(msg.channel);
+wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
+  // Verify x402 payment before allowing WebSocket connection
+  const paymentHeader = req.headers['x402-payment'] as string | undefined;
+  if (!paymentHeader) {
+    ws.close(4402, 'Payment Required: include x402-payment header');
+    return;
+  }
+
+  verifyX402Payment(paymentHeader, WS_PRICE)
+    .then(async (result) => {
+      if (!result.valid) {
+        ws.close(4402, result.reason || 'Invalid Payment');
+        return;
       }
-    } catch { /* ignore malformed */ }
-  });
+      const payment = result.payment!;
+      // Mark nonce before deduction
+      await markNonceUsed(payment.wallet, payment.nonce);
+      const deducted = await deductApiPayment(payment.wallet, WS_PRICE);
+      if (!deducted) {
+        ws.close(4402, 'Insufficient Balance');
+        return;
+      }
 
-  ws.on('close', () => {
-    wsConnectionsActive.dec();
-    for (const ch of joined) subscribers.get(ch)?.delete(ws);
-  });
+      wsConnectionsActive.inc();
+      const joined = new Set<string>();
+      let subscriptionCount = 0;
+      const MAX_SUBSCRIPTIONS = 10;
+
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString()) as { type: string; channel: string };
+          if (msg.type === 'subscribe' && msg.channel) {
+            if (subscriptionCount >= MAX_SUBSCRIPTIONS) {
+              ws.send(JSON.stringify({ type: 'error', reason: 'Subscription limit reached' }));
+              return;
+            }
+            if (!subscribers.has(msg.channel)) subscribers.set(msg.channel, new Set());
+            subscribers.get(msg.channel)!.add(ws);
+            joined.add(msg.channel);
+            subscriptionCount++;
+            ws.send(JSON.stringify({ type: 'subscribed', channel: msg.channel }));
+          } else if (msg.type === 'unsubscribe' && msg.channel) {
+            subscribers.get(msg.channel)?.delete(ws);
+            if (joined.delete(msg.channel)) subscriptionCount--;
+          }
+        } catch { /* ignore malformed */ }
+      });
+
+      ws.on('close', () => {
+        wsConnectionsActive.dec();
+        for (const ch of joined) subscribers.get(ch)?.delete(ws);
+      });
+    })
+    .catch(() => {
+      ws.close(1011, 'Payment verification failed');
+    });
 });
 
 // Redis pub/sub for real-time events from order-engine and oracle

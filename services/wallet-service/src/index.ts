@@ -4,7 +4,7 @@ import { connect, NatsConnection, StringCodec } from 'nats';
 import balanceRouter from './routes/balance';
 import depositRouter from './routes/deposit';
 import withdrawRouter from './routes/withdraw';
-import { creditBalance, debitLocked, debitLockedEth, unlockBalance } from './lib/ledger';
+import { settleTradeTransaction, unlockBalance } from './lib/ledger';
 
 dotenv.config();
 
@@ -48,20 +48,24 @@ async function startNatsSubscriber(): Promise<void> {
             fee: string;
           };
 
-          // Buyer: debit locked USDC (already locked at order placement), credit ETH
-          await debitLocked(trade.buyerWallet, trade.usdcTotal);
-          await creditBalance(trade.buyerWallet, trade.amount, 'eth');
-
-          // Seller: debit locked ETH (consumed by trade), credit USDC net of fee
-          await debitLockedEth(trade.sellerWallet, trade.amount);
-          const netUsdc = (parseFloat(trade.usdcTotal) - parseFloat(trade.fee)).toFixed(6);
-          await creditBalance(trade.sellerWallet, netUsdc, 'usdc');
-
-          // Platform: collect trading fee
-          const platformWallet = process.env.PLATFORM_FEE_WALLET;
-          if (platformWallet && parseFloat(trade.fee) > 0) {
-            await creditBalance(platformWallet, trade.fee, 'usdc');
+          // Validate amounts before touching balances
+          const usdcTotal = parseFloat(trade.usdcTotal);
+          const ethAmount = parseFloat(trade.amount);
+          const fee = parseFloat(trade.fee);
+          if (!trade.buyerWallet || !trade.sellerWallet || usdcTotal <= 0 || ethAmount <= 0 || fee < 0 || fee > usdcTotal) {
+            console.error('[wallet] Invalid trade settlement data, skipping:', trade);
+            continue;
           }
+
+          // Settle atomically — all 4 balance mutations in one DB transaction
+          await settleTradeTransaction(
+            trade.buyerWallet,
+            trade.sellerWallet,
+            trade.usdcTotal,
+            trade.amount,
+            trade.fee,
+            process.env.PLATFORM_FEE_WALLET,
+          );
         } catch (err) {
           console.error('Error processing trades.filled:', err);
         }

@@ -17,11 +17,11 @@ function checkRisk(wallet: string): Promise<{ allowed: boolean; reason?: string 
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
-          try { resolve(JSON.parse(data)); } catch { resolve({ allowed: true }); }
+          try { resolve(JSON.parse(data)); } catch { resolve({ allowed: false, reason: 'Risk service response invalid' }); }
         });
       }
     );
-    req.on('error', () => resolve({ allowed: true })); // fail open
+    req.on('error', () => resolve({ allowed: false, reason: 'Risk service unavailable' }));
     req.write(body);
     req.end();
   });
@@ -36,9 +36,17 @@ declare global {
   }
 }
 
+function findEndpointConfig(method: string, path: string): EndpointConfig | undefined {
+  // Exact match first
+  const exact = x402Config[`${method} ${path}`];
+  if (exact) return exact;
+  // Prefix match for dynamic routes (e.g. DELETE /orders/uuid → DELETE /orders)
+  const basePath = '/' + path.split('/')[1];
+  return x402Config[`${method} ${basePath}`];
+}
+
 export function x402Middleware(req: Request, res: Response, next: NextFunction): void {
-  const endpointKey = `${req.method} ${req.path}`;
-  const config: EndpointConfig | undefined = x402Config[endpointKey];
+  const config = findEndpointConfig(req.method, req.path);
 
   if (!config) {
     next();
@@ -52,7 +60,7 @@ export function x402Middleware(req: Request, res: Response, next: NextFunction):
     res.status(402).json({
       error: 'Payment Required',
       x402: {
-        endpoint: endpointKey,
+        endpoint: `${req.method} ${req.path}`,
         price: config.price,
         accepts: config.accepts,
         description: config.description,
@@ -78,9 +86,23 @@ export function x402Middleware(req: Request, res: Response, next: NextFunction):
 
       const payment = result.payment!;
 
+      // Risk check BEFORE touching funds — fail closed on service error
+      const endRisk = riskCheckDuration.startTimer();
+      const risk = await checkRisk(payment.wallet);
+      endRisk();
+      if (!risk.allowed) {
+        riskRateLimited.inc();
+        res.status(429).json({ error: 'Rate limited', reason: risk.reason });
+        return;
+      }
+
+      // Mark nonce BEFORE deduction — prevents replay window on crash between deduct and mark
+      await markNonceUsed(payment.wallet, payment.nonce);
+
       // Deduct from internal USDC balance — atomic, returns false if insufficient
       const deducted = await deductApiPayment(payment.wallet, config.price);
       if (!deducted) {
+        // Nonce is burned intentionally — prevents replay even if balance was insufficient
         x402PaymentsTotal.inc({ result: 'insufficient' });
         res.status(402).json({
           error: 'Insufficient Balance',
@@ -90,22 +112,9 @@ export function x402Middleware(req: Request, res: Response, next: NextFunction):
         return;
       }
 
-      // Mark nonce used only after successful deduction (prevents double-spend on retry)
-      await markNonceUsed(payment.wallet, payment.nonce);
-
       x402PaymentsTotal.inc({ result: 'valid' });
       req.x402Payment = payment;
       req.agentWallet = payment.wallet;
-
-      // Risk check (fail open — don't block on risk service unavailability)
-      const endRisk = riskCheckDuration.startTimer();
-      const risk = await checkRisk(payment.wallet);
-      endRisk();
-      if (!risk.allowed) {
-        riskRateLimited.inc();
-        res.status(429).json({ error: 'Rate limited', reason: risk.reason });
-        return;
-      }
 
       next();
     })

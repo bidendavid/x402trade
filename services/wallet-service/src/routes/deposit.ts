@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ethers } from 'ethers';
 import { getPool } from '../lib/db';
-import { creditBalance, getOrCreateAgent } from '../lib/ledger';
+import { getOrCreateAgent } from '../lib/ledger';
 
 const router = Router();
 
@@ -27,13 +27,6 @@ router.post('/deposit', async (req: Request, res: Response) => {
   }
 
   const pool = getPool();
-
-  // Idempotency: reject already-processed tx
-  const existing = await pool.query('SELECT id FROM payments WHERE payment_hash = $1', [txHash.toLowerCase()]);
-  if (existing.rows.length > 0) {
-    res.status(409).json({ error: 'Transaction already processed' });
-    return;
-  }
 
   try {
     const provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
@@ -67,14 +60,39 @@ router.post('/deposit', async (req: Request, res: Response) => {
 
     const amountDecimal = ethers.formatUnits(depositAmount, USDC_DECIMALS);
     const agent = await getOrCreateAgent(wallet);
+    const client = await pool.connect();
 
-    await pool.query(
-      `INSERT INTO payments (payment_hash, agent_id, endpoint, amount, token_address, status, confirmed_at)
-       VALUES ($1, $2, 'deposit', $3, $4, 'confirmed', NOW())`,
-      [txHash.toLowerCase(), agent.id, amountDecimal, USDC_CONTRACT]
-    );
+    try {
+      await client.query('BEGIN');
 
-    await creditBalance(wallet, amountDecimal, 'usdc');
+      // Atomic idempotency: INSERT ... ON CONFLICT DO NOTHING is race-safe
+      const insertResult = await client.query(
+        `INSERT INTO payments (payment_hash, agent_id, endpoint, amount, token_address, status, confirmed_at)
+         VALUES ($1, $2, 'deposit', $3, $4, 'confirmed', NOW())
+         ON CONFLICT (payment_hash) DO NOTHING`,
+        [txHash.toLowerCase(), agent.id, amountDecimal, USDC_CONTRACT]
+      );
+
+      if ((insertResult.rowCount ?? 0) === 0) {
+        await client.query('ROLLBACK');
+        res.status(409).json({ error: 'Transaction already processed' });
+        return;
+      }
+
+      // Credit balance inside the same transaction
+      await client.query(
+        `UPDATE balances b SET usdc_balance = usdc_balance + $1, updated_at = NOW()
+         FROM agents a WHERE a.id = b.agent_id AND a.wallet_address = $2`,
+        [amountDecimal, wallet.toLowerCase()]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
 
     res.json({ success: true, wallet, txHash, amount: amountDecimal, asset: 'USDC' });
   } catch (err) {

@@ -145,3 +145,79 @@ export async function debitLockedEth(walletAddress: string, ethAmount: string): 
   );
   await invalidateBalanceCache(walletAddress);
 }
+
+/**
+ * Settle a trade atomically in a single DB transaction.
+ * All 4 balance mutations (buyer debit locked, buyer credit ETH,
+ * seller debit locked ETH, seller credit USDC) succeed or fail together.
+ */
+export async function settleTradeTransaction(
+  buyerWallet: string,
+  sellerWallet: string,
+  usdcTotal: string,
+  ethAmount: string,
+  fee: string,
+  platformWallet: string | undefined,
+): Promise<void> {
+  const pool = getPool();
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Buyer: consume locked USDC, credit ETH received
+    await client.query(
+      `UPDATE balances b SET usdc_locked = usdc_locked - $1, updated_at = NOW()
+       FROM agents a WHERE a.id = b.agent_id AND a.wallet_address = $2`,
+      [usdcTotal, buyerWallet.toLowerCase()]
+    );
+    await client.query(
+      `UPDATE balances b SET eth_balance = eth_balance + $1, updated_at = NOW()
+       FROM agents a WHERE a.id = b.agent_id AND a.wallet_address = $2`,
+      [ethAmount, buyerWallet.toLowerCase()]
+    );
+
+    // Seller: consume locked ETH, credit USDC net of fee
+    await client.query(
+      `UPDATE balances b SET eth_locked = eth_locked - $1, updated_at = NOW()
+       FROM agents a WHERE a.id = b.agent_id AND a.wallet_address = $2`,
+      [ethAmount, sellerWallet.toLowerCase()]
+    );
+    const netUsdc = (parseFloat(usdcTotal) - parseFloat(fee)).toFixed(6);
+    await client.query(
+      `UPDATE balances b SET usdc_balance = usdc_balance + $1, updated_at = NOW()
+       FROM agents a WHERE a.id = b.agent_id AND a.wallet_address = $2`,
+      [netUsdc, sellerWallet.toLowerCase()]
+    );
+
+    // Platform fee
+    if (platformWallet && parseFloat(fee) > 0) {
+      await client.query(
+        `INSERT INTO agents (wallet_address, score, is_active, is_blacklisted)
+         VALUES ($1, 100, true, false) ON CONFLICT (wallet_address) DO NOTHING`,
+        [platformWallet.toLowerCase()]
+      );
+      await client.query(
+        `INSERT INTO balances (agent_id, usdc_balance, usdc_locked, eth_balance, eth_locked)
+         SELECT id, 0, 0, 0, 0 FROM agents WHERE wallet_address = $1
+         ON CONFLICT (agent_id) DO NOTHING`,
+        [platformWallet.toLowerCase()]
+      );
+      await client.query(
+        `UPDATE balances b SET usdc_balance = usdc_balance + $1, updated_at = NOW()
+         FROM agents a WHERE a.id = b.agent_id AND a.wallet_address = $2`,
+        [fee, platformWallet.toLowerCase()]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+    await Promise.all([
+      invalidateBalanceCache(buyerWallet),
+      invalidateBalanceCache(sellerWallet),
+    ]);
+  }
+}

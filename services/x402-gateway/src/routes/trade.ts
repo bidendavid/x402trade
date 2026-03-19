@@ -14,6 +14,10 @@ async function getNats(): Promise<NatsConnection> {
   return nc;
 }
 
+const VALID_PAIRS = new Set(['ETH-USDC', 'BTC-USDC']);
+const MAX_ORDER_AMOUNT = 1000;   // max base token per order
+const MAX_ORDER_PRICE  = 1_000_000; // max USDC per base token
+
 router.post('/trade', async (req: Request, res: Response) => {
   const { pair, side, type, amount, price } = req.body as {
     pair: string;
@@ -27,9 +31,33 @@ router.post('/trade', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'Missing required fields: pair, side, type, amount' });
     return;
   }
-  if (type === 'limit' && !price) {
-    res.status(400).json({ error: 'price is required for limit orders' });
+  if (!VALID_PAIRS.has(pair)) {
+    res.status(400).json({ error: 'Invalid trading pair', validPairs: [...VALID_PAIRS] });
     return;
+  }
+  if (!['buy', 'sell'].includes(side)) {
+    res.status(400).json({ error: 'side must be "buy" or "sell"' });
+    return;
+  }
+  if (!['limit', 'market'].includes(type)) {
+    res.status(400).json({ error: 'type must be "limit" or "market"' });
+    return;
+  }
+  const amountNum = parseFloat(amount);
+  if (isNaN(amountNum) || amountNum <= 0 || amountNum > MAX_ORDER_AMOUNT) {
+    res.status(400).json({ error: `amount must be a positive number ≤ ${MAX_ORDER_AMOUNT}` });
+    return;
+  }
+  if (type === 'limit') {
+    if (!price) {
+      res.status(400).json({ error: 'price is required for limit orders' });
+      return;
+    }
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum <= 0 || priceNum > MAX_ORDER_PRICE) {
+      res.status(400).json({ error: `price must be a positive number ≤ ${MAX_ORDER_PRICE}` });
+      return;
+    }
   }
 
   const payload = {

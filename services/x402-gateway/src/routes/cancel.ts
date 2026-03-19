@@ -43,7 +43,11 @@ router.delete('/orders/:orderId', async (req: Request, res: Response) => {
       wallet_address: string;
     };
 
-    if (agentWallet && order.wallet_address !== agentWallet.toLowerCase()) {
+    if (!agentWallet) {
+      res.status(401).json({ error: 'Unauthorized: wallet not identified' });
+      return;
+    }
+    if (order.wallet_address !== agentWallet.toLowerCase()) {
       res.status(403).json({ error: 'Not your order' });
       return;
     }
