@@ -13,9 +13,6 @@ jest.mock('ethers', () => {
     ethers: {
       ...(actual.ethers as Record<string, unknown>),
       verifyMessage: jest.fn(),
-      JsonRpcProvider: jest.fn(() => ({
-        getTransactionReceipt: jest.fn(async () => null),
-      })),
     },
   };
 });
@@ -25,7 +22,7 @@ import {
   parseX402Header,
   verifySignature,
   checkReplay,
-  markPaymentUsed,
+  markNonceUsed,
   checkBlacklist,
   verifyX402Payment,
   X402Payment,
@@ -35,14 +32,16 @@ import { getRedis } from '../lib/redis';
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const WALLET = '0xabcdef1234567890abcdef1234567890abcdef12';
+const NONCE = String(Date.now());
+const AMOUNT = '0.01';
+const REQUIRED_AMOUNT = '0.01';
 
 function makePayment(overrides: Partial<X402Payment> = {}): X402Payment {
   return {
     wallet: WALLET,
     signature: '0xsig',
-    message: 'Pay 0.01 USDC',
-    transactionHash: '0x' + 'a'.repeat(64),
-    amount: '10000', // 0.01 USDC in 6-decimal units
+    nonce: NONCE,
+    amount: AMOUNT,
     ...overrides,
   };
 }
@@ -64,7 +63,8 @@ describe('parseX402Header', () => {
     const header = encodePayment(payment);
     const parsed = parseX402Header(header);
     expect(parsed.wallet).toBe(WALLET);
-    expect(parsed.amount).toBe('10000');
+    expect(parsed.amount).toBe(AMOUNT);
+    expect(parsed.nonce).toBe(NONCE);
   });
 
   it('throws on malformed base64', () => {
@@ -94,18 +94,16 @@ describe('verifySignature', () => {
   });
 });
 
-// ── checkReplay / markPaymentUsed ──────────────────────────────────────────────
+// ── checkReplay / markNonceUsed ────────────────────────────────────────────────
 
 describe('replay prevention', () => {
-  const txHash = '0x' + 'b'.repeat(64);
-
-  it('returns false for unseen txHash', async () => {
-    expect(await checkReplay(txHash)).toBe(false);
+  it('returns false for unseen nonce', async () => {
+    expect(await checkReplay(WALLET, NONCE)).toBe(false);
   });
 
-  it('returns true after marking used', async () => {
-    await markPaymentUsed(txHash);
-    expect(await checkReplay(txHash)).toBe(true);
+  it('returns true after marking nonce used', async () => {
+    await markNonceUsed(WALLET, NONCE);
+    expect(await checkReplay(WALLET, NONCE)).toBe(true);
   });
 });
 
@@ -126,55 +124,47 @@ describe('checkBlacklist', () => {
 
 describe('verifyX402Payment', () => {
   beforeEach(() => {
-    // Default: valid signature, no replay, no blacklist
     (ethers.verifyMessage as jest.Mock).mockReturnValue(WALLET);
-    process.env.X402_PAYMENT_ADDRESS = ''; // skip on-chain check
   });
 
   it('returns valid=true for a correct payment', async () => {
-    const result = await verifyX402Payment(encodePayment(makePayment()));
+    const result = await verifyX402Payment(encodePayment(makePayment()), REQUIRED_AMOUNT);
     expect(result.valid).toBe(true);
     expect(result.payment?.wallet).toBe(WALLET);
   });
 
   it('returns valid=false for malformed header', async () => {
-    const result = await verifyX402Payment('!!!');
+    const result = await verifyX402Payment('!!!', REQUIRED_AMOUNT);
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/format/i);
   });
 
   it('returns valid=false when required fields are missing', async () => {
-    const bad = encodePayment({ wallet: WALLET, signature: '', message: '', transactionHash: '', amount: '' });
-    const result = await verifyX402Payment(bad);
+    const bad = encodePayment({ wallet: WALLET, signature: '', amount: '', nonce: '' });
+    const result = await verifyX402Payment(bad, REQUIRED_AMOUNT);
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/missing/i);
   });
 
   it('returns valid=false on bad signature', async () => {
     (ethers.verifyMessage as jest.Mock).mockReturnValue('0x0000000000000000000000000000000000000001');
-    const result = await verifyX402Payment(encodePayment(makePayment()));
+    const result = await verifyX402Payment(encodePayment(makePayment()), REQUIRED_AMOUNT);
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/signature/i);
   });
 
   it('returns valid=false on replay attack', async () => {
     const payment = makePayment();
-    await markPaymentUsed(payment.transactionHash);
-    const result = await verifyX402Payment(encodePayment(payment));
+    await markNonceUsed(payment.wallet, payment.nonce);
+    const result = await verifyX402Payment(encodePayment(payment), REQUIRED_AMOUNT);
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/already used/i);
   });
 
   it('returns valid=false for blacklisted wallet', async () => {
     (getRedis() as any)._set(`blacklist:${WALLET.toLowerCase()}`, 'fraud');
-    const result = await verifyX402Payment(encodePayment(makePayment()));
+    const result = await verifyX402Payment(encodePayment(makePayment()), REQUIRED_AMOUNT);
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/blacklisted/i);
-  });
-
-  it('marks txHash as used after successful verification', async () => {
-    const payment = makePayment();
-    await verifyX402Payment(encodePayment(payment));
-    expect(await checkReplay(payment.transactionHash)).toBe(true);
   });
 });
