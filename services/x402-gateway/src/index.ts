@@ -138,8 +138,11 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
 
 // Redis pub/sub for real-time events from order-engine and oracle
 function startRedisSub(): void {
-  const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-  const sub = new Redis(REDIS_URL);
+  const sub = new Redis({
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+  });
   sub.on('error', (e) => console.error('[ws] Redis sub error:', e));
 
   // Price updates from oracle-service

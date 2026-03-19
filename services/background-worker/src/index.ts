@@ -24,12 +24,15 @@ import { connect, NatsConnection, StringCodec } from 'nats';
 
 // ── Shared infrastructure ──────────────────────────────────────────────────────
 
-const REDIS_URL  = process.env.REDIS_URL  || 'redis://localhost:6379';
 const DB_URL     = process.env.DB_URL     || 'postgresql://agent:agentpass@localhost:5432/agent_exchange';
 const NATS_URL   = process.env.NATS_URL   || 'nats://localhost:4222';
 const PORT       = parseInt(process.env.BACKGROUND_PORT || '8083');
 
-const redis = new Redis(REDIS_URL);
+const redis = new Redis({
+  host: process.env.REDIS_HOST || 'localhost',
+  port: parseInt(process.env.REDIS_PORT || '6379', 10),
+  password: process.env.REDIS_PASSWORD || undefined,
+});
 const pool  = new Pool({ connectionString: DB_URL });
 const sc    = StringCodec();
 

@@ -50,7 +50,8 @@ services:
   order-engine:
     image: ghcr.io/${GITHUB_REPO}/order-engine:latest
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       NATS_URL: nats://nats:4222
       DB_URL: postgresql://agent:${DB_PASSWORD}@postgres:5432/agent_exchange
     depends_on:
@@ -64,7 +65,8 @@ services:
     environment:
       WALLET_PORT: 8082
       DB_URL: postgresql://agent:${DB_PASSWORD}@postgres:5432/agent_exchange
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       NATS_URL: nats://nats:4222
       PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET}
       USDC_CONTRACT: ${USDC_CONTRACT}
@@ -80,7 +82,8 @@ services:
     environment:
       BACKGROUND_PORT: 8083
       DB_URL: postgresql://agent:${DB_PASSWORD}@postgres:5432/agent_exchange
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       NATS_URL: nats://nats:4222
       BASE_RPC_URL: ${BASE_RPC_URL}
       AGENT_EXCHANGE_CORE_ADDRESS: ${AGENT_EXCHANGE_CORE_ADDRESS:-}
@@ -101,7 +104,8 @@ services:
     environment:
       PORT: 8080
       DB_URL: postgresql://agent:${DB_PASSWORD}@postgres:5432/agent_exchange
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       NATS_URL: nats://nats:4222
       RISK_CONTROL_URL: http://background-worker:8083
       DEPOSIT_ADDRESS: ${DEPOSIT_ADDRESS}

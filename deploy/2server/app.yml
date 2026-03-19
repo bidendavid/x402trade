@@ -27,7 +27,8 @@ services:
   order-engine:
     image: ghcr.io/${GITHUB_REPO}/order-engine:latest
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       NATS_URL: nats://nats:4222
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
     depends_on:
@@ -43,7 +44,8 @@ services:
     environment:
       WALLET_PORT: 8082
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
-      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       NATS_URL: nats://nats:4222
       PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET}
     depends_on:
@@ -58,7 +60,8 @@ services:
     image: ghcr.io/${GITHUB_REPO}/background-worker:latest
     environment:
       BACKGROUND_PORT: 8083
-      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
       NATS_URL: nats://nats:4222
       BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
@@ -79,7 +82,8 @@ services:
     image: ghcr.io/${GITHUB_REPO}/x402-gateway:latest
     environment:
       PORT: 8080
-      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
       NATS_URL: nats://nats:4222
       RISK_CONTROL_URL: http://background-worker:8083
