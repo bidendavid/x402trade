@@ -1,12 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { getRedis } from '../lib/redis';
+import { isValidPair } from '../lib/validate';
 
 const router = Router();
 
 router.get('/ticker', async (req: Request, res: Response) => {
   const pair = req.query.pair as string;
-  if (!pair) {
-    res.status(400).json({ error: 'pair query parameter required' });
+  if (!pair || !isValidPair(pair)) {
+    res.status(400).json({ error: 'Invalid or missing pair', validPairs: ['ETH-USDC', 'BTC-USDC'] });
     return;
   }
 
@@ -40,8 +41,8 @@ router.get('/trades', async (req: Request, res: Response) => {
   const pair = req.query.pair as string;
   const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
 
-  if (!pair) {
-    res.status(400).json({ error: 'pair query parameter required' });
+  if (!pair || !isValidPair(pair)) {
+    res.status(400).json({ error: 'Invalid or missing pair', validPairs: ['ETH-USDC', 'BTC-USDC'] });
     return;
   }
 

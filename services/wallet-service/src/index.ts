@@ -4,7 +4,7 @@ import { connect, NatsConnection, StringCodec } from 'nats';
 import balanceRouter from './routes/balance';
 import depositRouter from './routes/deposit';
 import withdrawRouter from './routes/withdraw';
-import { settleTradeTransaction, unlockBalance } from './lib/ledger';
+import { settleTradeTransaction, unlockBalance, unlockEthBalance } from './lib/ledger';
 
 dotenv.config();
 
@@ -87,10 +87,13 @@ async function startNatsSubscriber(): Promise<void> {
           if (evt.side === 'buy') {
             // Unlock USDC: remaining ETH qty * price
             const usdcAmount = (parseFloat(evt.remainingAmount) * parseFloat(evt.price)).toFixed(6);
-            await unlockBalance(evt.agentWallet, usdcAmount);
+            if (parseFloat(usdcAmount) > 0) await unlockBalance(evt.agentWallet, usdcAmount);
+          } else if (evt.side === 'sell') {
+            // Unlock ETH: remaining unfilled ETH quantity
+            if (parseFloat(evt.remainingAmount) > 0) {
+              await unlockEthBalance(evt.agentWallet, evt.remainingAmount);
+            }
           }
-          // Sell side unlock is handled via eth_locked column in order-engine/balance.ts
-          // wallet-service only manages USDC lock; ETH balance is credited at trade time
         } catch (err) {
           console.error('Error processing orders.cancelled:', err);
         }

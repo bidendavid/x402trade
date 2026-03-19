@@ -115,7 +115,10 @@ const SCORE_RULES = { successfulTrade: 1, cancelledOrder: -2 };
 
 async function getScore(wallet: string): Promise<number> {
   const cached = await redis.get(`score:${wallet.toLowerCase()}`);
-  if (cached !== null) return parseInt(cached);
+  if (cached !== null) {
+    const parsed = parseInt(cached, 10);
+    if (!isNaN(parsed)) return parsed;
+  }
   const r = await pool.query<{ score: number }>('SELECT score FROM agents WHERE wallet_address = $1', [wallet.toLowerCase()]);
   const score = r.rows[0]?.score ?? 100;
   await redis.set(`score:${wallet.toLowerCase()}`, String(score), 'EX', CACHE_TTL);

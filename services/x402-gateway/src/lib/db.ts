@@ -18,12 +18,8 @@ export function getPool(): Pool {
  */
 export async function deductApiPayment(walletAddress: string, amount: string): Promise<boolean> {
   if (parseFloat(amount) === 0) {
-    // Free endpoint: verify agent exists without touching balances
-    const result = await getPool().query(
-      `SELECT 1 FROM agents WHERE wallet_address = $1`,
-      [walletAddress.toLowerCase()]
-    );
-    return (result.rowCount ?? 0) > 0;
+    // Free authenticated endpoint: signature verified, no charge required
+    return true;
   }
   const result = await getPool().query(
     `UPDATE balances b

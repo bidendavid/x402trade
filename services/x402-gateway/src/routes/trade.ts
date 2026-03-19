@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { connect, NatsConnection, StringCodec } from 'nats';
 import { randomUUID } from 'crypto';
 import { ordersTotal, orderMatchDuration } from '../lib/metrics';
+import { isValidPair } from '../lib/validate';
 
 const router = Router();
 const sc = StringCodec();
@@ -14,7 +15,6 @@ async function getNats(): Promise<NatsConnection> {
   return nc;
 }
 
-const VALID_PAIRS = new Set(['ETH-USDC', 'BTC-USDC']);
 const MAX_ORDER_AMOUNT = 1000;   // max base token per order
 const MAX_ORDER_PRICE  = 1_000_000; // max USDC per base token
 
@@ -31,8 +31,8 @@ router.post('/trade', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'Missing required fields: pair, side, type, amount' });
     return;
   }
-  if (!VALID_PAIRS.has(pair)) {
-    res.status(400).json({ error: 'Invalid trading pair', validPairs: [...VALID_PAIRS] });
+  if (!isValidPair(pair)) {
+    res.status(400).json({ error: 'Invalid trading pair', validPairs: ['ETH-USDC', 'BTC-USDC'] });
     return;
   }
   if (!['buy', 'sell'].includes(side)) {

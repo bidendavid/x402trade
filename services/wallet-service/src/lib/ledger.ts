@@ -133,6 +133,20 @@ export async function debitLocked(walletAddress: string, usdcAmount: string): Pr
   await invalidateBalanceCache(walletAddress);
 }
 
+export async function unlockEthBalance(walletAddress: string, ethAmount: string): Promise<void> {
+  const pool = getPool();
+  const agent = await getOrCreateAgent(walletAddress);
+  await pool.query(
+    `UPDATE balances
+     SET eth_locked  = eth_locked  - $1,
+         eth_balance = eth_balance + $1,
+         updated_at  = NOW()
+     WHERE agent_id = $2`,
+    [ethAmount, agent.id]
+  );
+  await invalidateBalanceCache(walletAddress);
+}
+
 export async function debitLockedEth(walletAddress: string, ethAmount: string): Promise<void> {
   const pool = getPool();
   const agent = await getOrCreateAgent(walletAddress);

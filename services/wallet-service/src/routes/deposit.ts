@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ethers } from 'ethers';
 import { getPool } from '../lib/db';
 import { getOrCreateAgent } from '../lib/ledger';
+import { isValidAddress } from '../lib/validate';
 
 const router = Router();
 
@@ -19,6 +20,10 @@ router.post('/deposit', async (req: Request, res: Response) => {
 
   if (!wallet || !txHash) {
     res.status(400).json({ error: 'wallet and txHash required' });
+    return;
+  }
+  if (!isValidAddress(wallet)) {
+    res.status(400).json({ error: 'Invalid wallet address format' });
     return;
   }
   if (!DEPOSIT_ADDRESS) {

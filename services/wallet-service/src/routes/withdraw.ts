@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ethers } from 'ethers';
 import { getPool } from '../lib/db';
 import { getOrCreateAgent } from '../lib/ledger';
+import { isValidAddress } from '../lib/validate';
 import { randomUUID } from 'crypto';
 
 const router = Router();
@@ -16,6 +17,10 @@ router.post('/withdraw', async (req: Request, res: Response) => {
 
   if (!wallet || !amount || !toAddress || !signature) {
     res.status(400).json({ error: 'wallet, amount, toAddress, signature required' });
+    return;
+  }
+  if (!isValidAddress(wallet) || !isValidAddress(toAddress)) {
+    res.status(400).json({ error: 'Invalid wallet or toAddress format' });
     return;
   }
 

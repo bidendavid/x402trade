@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getRedis } from '../lib/redis';
+import { isValidPair } from '../lib/validate';
 
 const router = Router();
 
@@ -7,8 +8,8 @@ router.get('/orderbook', async (req: Request, res: Response) => {
   const pair = req.query.pair as string;
   const depth = Math.min(parseInt(req.query.depth as string) || 20, 100);
 
-  if (!pair) {
-    res.status(400).json({ error: 'pair query parameter required' });
+  if (!pair || !isValidPair(pair)) {
+    res.status(400).json({ error: 'Invalid or missing pair', validPairs: ['ETH-USDC', 'BTC-USDC'] });
     return;
   }
 
