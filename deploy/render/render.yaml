@@ -1,0 +1,147 @@
+# Render.com deployment blueprint
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: Connect GitHub repo in Render dashboard → select this file
+# Note: Render provides managed PostgreSQL and Redis — use their add-ons
+#       instead of running them as services here.
+
+databases:
+  - name: x402trade-postgres
+    databaseName: agent_exchange
+    user: agent
+    plan: starter  # $7/mo — upgrade to standard for production
+
+services:
+  # Redis (managed)
+  - type: redis
+    name: x402trade-redis
+    plan: starter  # $10/mo
+    ipAllowList: []
+
+  # NATS (not managed on Render — runs as a private service)
+  - type: pserv
+    name: nats
+    runtime: docker
+    dockerfilePath: ./services/nats.Dockerfile
+    plan: starter
+
+  # Order Engine
+  - type: pserv
+    name: order-engine
+    runtime: docker
+    dockerfilePath: ./services/order-engine/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: DB_URL
+        fromDatabase:
+          name: x402trade-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: x402trade-redis
+          property: connectionString
+      - key: NATS_URL
+        fromService:
+          type: pserv
+          name: nats
+          property: hostport
+
+  # Background Worker (oracle + risk + indexer)
+  - type: pserv
+    name: background-worker
+    runtime: docker
+    dockerfilePath: ./services/background-worker/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: BACKGROUND_PORT
+        value: 8083
+      - key: DB_URL
+        fromDatabase:
+          name: x402trade-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: x402trade-redis
+          property: connectionString
+      - key: NATS_URL
+        fromService:
+          type: pserv
+          name: nats
+          property: hostport
+      - key: BASE_RPC_URL
+        sync: false  # set manually in dashboard
+      - key: PLATFORM_FEE_WALLET
+        sync: false
+
+  # Wallet Service
+  - type: pserv
+    name: wallet-service
+    runtime: docker
+    dockerfilePath: ./services/wallet-service/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: WALLET_PORT
+        value: 8082
+      - key: DB_URL
+        fromDatabase:
+          name: x402trade-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: x402trade-redis
+          property: connectionString
+      - key: NATS_URL
+        fromService:
+          type: pserv
+          name: nats
+          property: hostport
+      - key: PLATFORM_FEE_WALLET
+        sync: false
+      - key: USDC_CONTRACT
+        value: "0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C"
+      - key: BASE_RPC_URL
+        sync: false
+
+  # x402 Gateway (public-facing)
+  - type: web
+    name: x402-gateway
+    runtime: docker
+    dockerfilePath: ./services/x402-gateway/Dockerfile
+    dockerContext: .
+    plan: starter
+    domains:
+      - getx402.trade
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DB_URL
+        fromDatabase:
+          name: x402trade-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: x402trade-redis
+          property: connectionString
+      - key: NATS_URL
+        fromService:
+          type: pserv
+          name: nats
+          property: hostport
+      - key: RISK_CONTROL_URL
+        fromService:
+          type: pserv
+          name: background-worker
+          property: hostport
+      - key: DEPOSIT_ADDRESS
+        sync: false  # set manually in dashboard
+      - key: PLATFORM_FEE_WALLET
+        sync: false
+      - key: USDC_CONTRACT
+        value: "0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C"

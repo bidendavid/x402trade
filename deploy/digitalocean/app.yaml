@@ -1,0 +1,136 @@
+# DigitalOcean App Platform deployment spec
+# Deploy: doctl apps create --spec deploy/digitalocean/app.yaml
+# Docs: https://docs.digitalocean.com/products/app-platform/
+#
+# Note: DO App Platform has managed PostgreSQL and Redis add-ons.
+# NATS must be self-hosted on a separate Droplet or use Synadia Cloud.
+#
+# Estimated cost: ~$50-80/mo (App Platform services + managed DB)
+# For cheaper option, use a single Droplet with deploy/vps/ instead (~$12/mo)
+
+name: x402trade
+region: nyc
+
+databases:
+  - name: x402trade-db
+    engine: PG
+    version: "15"
+    size: db-s-1vcpu-1gb  # $15/mo — upgrade for production
+    num_nodes: 1
+
+  - name: x402trade-redis
+    engine: REDIS
+    version: "7"
+    size: db-s-1vcpu-1gb  # $15/mo
+
+services:
+  - name: x402-gateway
+    github:
+      repo: bidendavid/x402trade
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: services/x402-gateway/Dockerfile
+    source_dir: /
+    http_port: 8080
+    instance_size_slug: basic-xxs  # $5/mo
+    instance_count: 1
+    domains:
+      - domain: getx402.trade
+        type: PRIMARY
+    envs:
+      - key: PORT
+        value: "8080"
+      - key: DB_URL
+        value: ${x402trade-db.DATABASE_URL}
+      - key: REDIS_URL
+        value: ${x402trade-redis.DATABASE_URL}
+      - key: NATS_URL
+        value: ""  # set to your NATS server URL
+        type: SECRET
+      - key: RISK_CONTROL_URL
+        value: ""  # set after background-worker is deployed
+        type: SECRET
+      - key: DEPOSIT_ADDRESS
+        value: ""
+        type: SECRET
+      - key: PLATFORM_FEE_WALLET
+        value: ""
+        type: SECRET
+      - key: USDC_CONTRACT
+        value: "0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C"
+
+  - name: background-worker
+    github:
+      repo: bidendavid/x402trade
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: services/background-worker/Dockerfile
+    source_dir: /
+    http_port: 8083
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    internal_ports:
+      - 8083
+    envs:
+      - key: BACKGROUND_PORT
+        value: "8083"
+      - key: DB_URL
+        value: ${x402trade-db.DATABASE_URL}
+      - key: REDIS_URL
+        value: ${x402trade-redis.DATABASE_URL}
+      - key: NATS_URL
+        value: ""
+        type: SECRET
+      - key: BASE_RPC_URL
+        value: "https://mainnet.base.org"
+      - key: PLATFORM_FEE_WALLET
+        value: ""
+        type: SECRET
+
+  - name: wallet-service
+    github:
+      repo: bidendavid/x402trade
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: services/wallet-service/Dockerfile
+    source_dir: /
+    http_port: 8082
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    internal_ports:
+      - 8082
+    envs:
+      - key: WALLET_PORT
+        value: "8082"
+      - key: DB_URL
+        value: ${x402trade-db.DATABASE_URL}
+      - key: REDIS_URL
+        value: ${x402trade-redis.DATABASE_URL}
+      - key: NATS_URL
+        value: ""
+        type: SECRET
+      - key: PLATFORM_FEE_WALLET
+        value: ""
+        type: SECRET
+      - key: USDC_CONTRACT
+        value: "0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C"
+      - key: BASE_RPC_URL
+        value: "https://mainnet.base.org"
+
+  - name: order-engine
+    github:
+      repo: bidendavid/x402trade
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: services/order-engine/Dockerfile
+    source_dir: /
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    envs:
+      - key: DB_URL
+        value: ${x402trade-db.DATABASE_URL}
+      - key: REDIS_URL
+        value: ${x402trade-redis.DATABASE_URL}
+      - key: NATS_URL
+        value: ""
+        type: SECRET
