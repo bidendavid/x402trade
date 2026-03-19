@@ -12,7 +12,7 @@
 services:
   nats:
     image: nats:alpine
-    command: "-js"
+    command: "-js -m 8222"
     restart: unless-stopped
     deploy:
       resources:
@@ -27,7 +27,7 @@ services:
   order-engine:
     image: ghcr.io/${GITHUB_REPO}/order-engine:latest
     environment:
-      REDIS_URL: redis://${REDIS_HOST}:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379
       NATS_URL: nats://nats:4222
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
     depends_on:
@@ -43,7 +43,7 @@ services:
     environment:
       WALLET_PORT: 8082
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
-      REDIS_URL: redis://${REDIS_HOST}:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379
       NATS_URL: nats://nats:4222
       PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET}
     depends_on:
@@ -58,7 +58,7 @@ services:
     image: ghcr.io/${GITHUB_REPO}/background-worker:latest
     environment:
       BACKGROUND_PORT: 8083
-      REDIS_URL: redis://${REDIS_HOST}:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
       NATS_URL: nats://nats:4222
       BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
@@ -79,7 +79,7 @@ services:
     image: ghcr.io/${GITHUB_REPO}/x402-gateway:latest
     environment:
       PORT: 8080
-      REDIS_URL: redis://${REDIS_HOST}:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:6379
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
       NATS_URL: nats://nats:4222
       RISK_CONTROL_URL: http://background-worker:8083
@@ -88,8 +88,7 @@ services:
       nats:              { condition: service_healthy }
       background-worker: { condition: service_healthy }
     ports:
-      - "80:8080"
-      - "443:8080"
+      - "127.0.0.1:8080:8080"
     restart: unless-stopped
     deploy:
       resources:

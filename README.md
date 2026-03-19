@@ -21,9 +21,7 @@ Six microservices communicate over NATS JetStream:
 | `x402-gateway` | 8080 | x402 payment verification + request routing |
 | `order-engine` | 8081 | Order book (Redis sorted sets) + matching engine |
 | `wallet-service` | 8082 | Agent balances, USDC lock/unlock, trade settlement |
-| `oracle-service` | 8083 | Price feeds (Chainlink, Band, CoinGecko) |
-| `risk-control` | 8084 | Agent scoring, rate limiting, blacklist |
-| `indexer-service` | — | On-chain event indexer (Base L2) |
+| `background-worker` | 8083 | Price oracle, risk control, on-chain indexer |
 
 **Infrastructure:** PostgreSQL 15 · Redis 7 · NATS JetStream · Base L2 (USDC)
 
@@ -39,7 +37,7 @@ Six microservices communicate over NATS JetStream:
 ### Run locally
 
 ```bash
-git clone https://github.com/yourusername/x402trade.git
+git clone https://github.com/bidendavid/x402trade.git
 cd x402trade
 
 cp .env.example .env
@@ -56,8 +54,8 @@ All services start with health checks. The gateway is available at `http://local
 curl http://localhost:8080/health
 # {"status":"ok","service":"x402-gateway"}
 
-curl http://localhost:8083/price/ETH-USDC
-# {"pair":"ETH-USDC","price":"2195.40","source":"coingecko",...}
+curl http://localhost:8083/health
+# {"status":"ok","service":"background-worker"}
 ```
 
 ---
@@ -83,7 +81,7 @@ const paymentHeader = Buffer.from(JSON.stringify({
 })).toString('base64');
 
 // Place a limit order
-const res = await fetch('https://getx402.trade/trade', {
+const res = await fetch('https://api.getx402.trade/trade', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -142,7 +140,7 @@ All endpoints require the `x402-payment` header: base64-encoded JSON `{ wallet, 
 ### WebSocket
 
 ```
-WS ws://localhost:8080/ws   →  $0.005 / connection
+WS wss://api.getx402.trade/ws   →  $0.005 / connection
 ```
 
 Subscribe after connecting:

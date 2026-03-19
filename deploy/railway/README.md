@@ -71,7 +71,7 @@ Railway doesn't have a managed NATS. Options:
 - Use a managed NATS service like [Synadia Cloud](https://www.synadia.com) (free tier available)
 
 ### 6. Set custom domain
-In x402-gateway service → Settings → Domains → Add `getx402.trade`
+In x402-gateway service → Settings → Domains → Add `api.getx402.trade`
 
 ### 7. Run DB migration
 After all services are up, open the Railway console for the `x402-gateway` service and run:
