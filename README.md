@@ -83,7 +83,7 @@ const paymentHeader = Buffer.from(JSON.stringify({
 })).toString('base64');
 
 // Place a limit order
-const res = await fetch('https://x402trade.vercel.app/trade', {
+const res = await fetch('https://getx402.trade/trade', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
