@@ -20,9 +20,7 @@ jobs:
           - x402-gateway
           - order-engine
           - wallet-service
-          - oracle-service
-          - risk-control
-          - indexer-service
+          - background-worker
 
     steps:
       - name: Checkout repository
@@ -41,7 +39,7 @@ jobs:
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
-          context: services/${{ matrix.service }}
+          context: .
           file: services/${{ matrix.service }}/Dockerfile
           push: true
           tags: |
