@@ -27,63 +27,21 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { ethers } from 'ethers';
+import { callApi } from './client.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const GATEWAY_URL = (process.env.X402_GATEWAY_URL || 'https://api.getx402.trade').replace(/\/$/, '');
 const PRIVATE_KEY = process.env.PRIVATE_KEY || '';
 
-const wallet = PRIVATE_KEY
-  ? new ethers.Wallet(PRIVATE_KEY)
-  : null;
+const wallet = PRIVATE_KEY ? new ethers.Wallet(PRIVATE_KEY) : null;
 
 if (!wallet) {
   process.stderr.write('[x402-mcp] WARNING: PRIVATE_KEY not set. Read-only mode (no trading).\n');
 }
 
-// ── x402 Payment Signing ──────────────────────────────────────────────────────
-
-async function buildPaymentHeader(amount: string): Promise<string> {
-  if (!wallet) throw new Error('PRIVATE_KEY not configured — cannot sign payment');
-  const nonce = Date.now().toString();
-  const signature = await wallet.signMessage(`x402:${nonce}:${amount}`);
-  return Buffer.from(JSON.stringify({
-    wallet: wallet.address,
-    signature,
-    amount,
-    nonce,
-  })).toString('base64');
-}
-
-// ── API Client ────────────────────────────────────────────────────────────────
-
-async function api(
-  method: 'GET' | 'POST' | 'DELETE',
-  path: string,
-  price: string,
-  body?: unknown,
-): Promise<unknown> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  // All authenticated endpoints (including price='0' free endpoints) require a signed header
-  if (wallet) {
-    headers['x402-payment'] = await buildPaymentHeader(price);
-  }
-
-  const res = await fetch(`${GATEWAY_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-
-  const data = await res.json() as unknown;
-
-  if (!res.ok) {
-    const msg = (data as Record<string, unknown>)?.error ?? res.statusText;
-    throw new Error(`API ${method} ${path} → ${res.status}: ${msg}`);
-  }
-
-  return data;
+function api(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<unknown> {
+  return callApi(GATEWAY_URL, wallet, method, path, body);
 }
 
 // ── Tool Definitions ──────────────────────────────────────────────────────────
@@ -241,7 +199,7 @@ async function handleTool(name: string, args: Record<string, unknown>): Promise<
 
     case 'x402_get_price': {
       const pair = args.pair as string;
-      const data = await api('GET', `/ticker?pair=${pair}`, '0.001') as Record<string, unknown>;
+      const data = await api('GET', `/ticker?pair=${pair}`) as Record<string, unknown>;
       return JSON.stringify({
         pair,
         price_usdc: data.price,
@@ -255,13 +213,13 @@ async function handleTool(name: string, args: Record<string, unknown>): Promise<
     case 'x402_get_orderbook': {
       const pair = args.pair as string;
       const depth = Math.min((args.depth as number) || 10, 50);
-      const data = await api('GET', `/orderbook?pair=${pair}&depth=${depth}`, '0.001') as Record<string, unknown>;
+      const data = await api('GET', `/orderbook?pair=${pair}&depth=${depth}`) as Record<string, unknown>;
       return JSON.stringify(data, null, 2);
     }
 
     case 'x402_get_balance': {
       if (!wallet) return 'Error: PRIVATE_KEY not configured. Set PRIVATE_KEY env var to check balance.';
-      const data = await api('GET', '/balance', '0') as Record<string, unknown>;
+      const data = await api('GET', '/balance') as Record<string, unknown>;
       return JSON.stringify({
         wallet: wallet.address,
         usdc_balance: data.usdc_balance,
@@ -278,7 +236,7 @@ async function handleTool(name: string, args: Record<string, unknown>): Promise<
       };
       if (type === 'limit' && !price) return 'Error: price is required for limit orders.';
 
-      const data = await api('POST', '/trade', '0.01', { pair, side, type, amount, price }) as Record<string, unknown>;
+      const data = await api('POST', '/trade', { pair, side, type, amount, price }) as Record<string, unknown>;
       return JSON.stringify({
         order_id: data.orderId,
         status: data.status,
@@ -291,7 +249,7 @@ async function handleTool(name: string, args: Record<string, unknown>): Promise<
     case 'x402_cancel_order': {
       if (!wallet) return 'Error: PRIVATE_KEY not configured. Cannot cancel orders without a wallet.';
       const orderId = args.order_id as string;
-      const data = await api('DELETE', `/orders/${orderId}`, '0') as Record<string, unknown>;
+      const data = await api('DELETE', `/orders/${orderId}`) as Record<string, unknown>;
       return JSON.stringify({
         cancelled: data.success,
         order_id: data.orderId,
@@ -305,14 +263,14 @@ async function handleTool(name: string, args: Record<string, unknown>): Promise<
       const limit = Math.min((args.limit as number) || 20, 50);
       const qs = new URLSearchParams({ limit: String(limit) });
       if (pair) qs.set('pair', pair);
-      const data = await api('GET', `/orders?${qs}`, '0.001') as Record<string, unknown>;
+      const data = await api('GET', `/orders?${qs}`) as Record<string, unknown>;
       return JSON.stringify(data, null, 2);
     }
 
     case 'x402_get_recent_trades': {
       const pair = args.pair as string;
       const limit = Math.min((args.limit as number) || 20, 50);
-      const data = await api('GET', `/trades?pair=${pair}&limit=${limit}`, '0.001') as Record<string, unknown>;
+      const data = await api('GET', `/trades?pair=${pair}&limit=${limit}`) as Record<string, unknown>;
       return JSON.stringify(data, null, 2);
     }
 
