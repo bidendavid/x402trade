@@ -1,8 +1,17 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
+
+# Copy all workspace package.json files for monorepo resolution
 COPY package*.json ./
+COPY services/x402-gateway/package*.json ./services/x402-gateway/
 COPY services/order-engine/package*.json ./services/order-engine/
-RUN npm ci --workspace=services/order-engine --ignore-scripts
+COPY services/wallet-service/package*.json ./services/wallet-service/
+COPY services/background-worker/package*.json ./services/background-worker/
+COPY services/oracle-service/package*.json ./services/oracle-service/
+COPY services/risk-control/package*.json ./services/risk-control/
+COPY services/indexer-service/package*.json ./services/indexer-service/
+RUN npm ci --ignore-scripts
+
 COPY tsconfig.base.json ./
 COPY services/order-engine ./services/order-engine
 RUN npm run build -w services/order-engine
