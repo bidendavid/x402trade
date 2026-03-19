@@ -1,7 +1,8 @@
 import http from 'http';
 import { Request, Response, NextFunction } from 'express';
 import { x402Config, EndpointConfig } from './config';
-import { verifyX402Payment, X402Payment } from './verify';
+import { verifyX402Payment, markNonceUsed, X402Payment } from './verify';
+import { deductApiPayment } from '../lib/db';
 import { x402PaymentsTotal, x402PaymentDuration, riskCheckDuration, riskRateLimited } from '../lib/metrics';
 
 function checkRisk(wallet: string): Promise<{ allowed: boolean; reason?: string }> {
@@ -55,37 +56,55 @@ export function x402Middleware(req: Request, res: Response, next: NextFunction):
         price: config.price,
         accepts: config.accepts,
         description: config.description,
-        paymentAddress: process.env.X402_PAYMENT_ADDRESS || '',
+        payTo: 'internal-balance',
         network: 'base',
         token: 'USDC',
+        howTo: 'Deposit USDC via POST /deposit, then sign message `x402:<nonce>:<amount>` with your wallet',
       },
     });
     return;
   }
 
   const endPayment = x402PaymentDuration.startTimer();
-  verifyX402Payment(paymentHeader)
+  verifyX402Payment(paymentHeader, config.price)
     .then(async (result) => {
       endPayment();
+
       if (!result.valid) {
         x402PaymentsTotal.inc({ result: 'invalid' });
         res.status(402).json({ error: 'Invalid Payment', reason: result.reason });
         return;
       }
-      x402PaymentsTotal.inc({ result: 'valid' });
-      req.x402Payment = result.payment;
-      req.agentWallet = result.payment?.wallet;
 
-      // Risk check (non-blocking on failure)
-      if (req.agentWallet) {
-        const endRisk = riskCheckDuration.startTimer();
-        const risk = await checkRisk(req.agentWallet);
-        endRisk();
-        if (!risk.allowed) {
-          riskRateLimited.inc();
-          res.status(429).json({ error: 'Rate limited', reason: risk.reason });
-          return;
-        }
+      const payment = result.payment!;
+
+      // Deduct from internal USDC balance — atomic, returns false if insufficient
+      const deducted = await deductApiPayment(payment.wallet, config.price);
+      if (!deducted) {
+        x402PaymentsTotal.inc({ result: 'insufficient' });
+        res.status(402).json({
+          error: 'Insufficient Balance',
+          reason: `Requires ${config.price} USDC. Fund your account via POST /deposit.`,
+          wallet: payment.wallet,
+        });
+        return;
+      }
+
+      // Mark nonce used only after successful deduction (prevents double-spend on retry)
+      await markNonceUsed(payment.wallet, payment.nonce);
+
+      x402PaymentsTotal.inc({ result: 'valid' });
+      req.x402Payment = payment;
+      req.agentWallet = payment.wallet;
+
+      // Risk check (fail open — don't block on risk service unavailability)
+      const endRisk = riskCheckDuration.startTimer();
+      const risk = await checkRisk(payment.wallet);
+      endRisk();
+      if (!risk.allowed) {
+        riskRateLimited.inc();
+        res.status(429).json({ error: 'Rate limited', reason: risk.reason });
+        return;
       }
 
       next();

@@ -81,41 +81,28 @@ services:
       retries: 5
     restart: unless-stopped
 
-  oracle-service:
+  # background-worker merges oracle + risk-control + indexer into one process
+  background-worker:
     build:
       context: .
-      dockerfile: services/oracle-service/Dockerfile
+      dockerfile: services/background-worker/Dockerfile
     environment:
-      ORACLE_PORT: 8083
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      redis: { condition: service_healthy }
-    ports:
-      - "8083:8083"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8083/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  risk-control:
-    build:
-      context: .
-      dockerfile: services/risk-control/Dockerfile
-    environment:
-      RISK_PORT: 8084
+      BACKGROUND_PORT: 8083
       DB_URL: postgresql://agent:agentpass@postgres:5432/agent_exchange
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
+      BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
+      AGENT_EXCHANGE_CORE_ADDRESS: ${AGENT_EXCHANGE_CORE_ADDRESS:-}
+      AGENT_WALLET_ADDRESS: ${AGENT_WALLET_ADDRESS:-}
+      PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }
       nats:     { condition: service_healthy }
     ports:
-      - "8084:8084"
+      - "8083:8083"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8084/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8083/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -130,12 +117,14 @@ services:
       REDIS_URL: redis://redis:6379
       DB_URL: postgresql://agent:agentpass@postgres:5432/agent_exchange
       NATS_URL: nats://nats:4222
-      RISK_CONTROL_URL: http://risk-control:8084
+      RISK_CONTROL_URL: http://background-worker:8083
+      DEPOSIT_ADDRESS: ${DEPOSIT_ADDRESS:-}
+      PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET:-}
     depends_on:
-      postgres:     { condition: service_healthy }
-      redis:        { condition: service_healthy }
-      nats:         { condition: service_healthy }
-      risk-control: { condition: service_healthy }
+      postgres:          { condition: service_healthy }
+      redis:             { condition: service_healthy }
+      nats:              { condition: service_healthy }
+      background-worker: { condition: service_healthy }
     ports:
       - "8080:8080"
     healthcheck:
@@ -143,17 +132,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
-
-  indexer-service:
-    build:
-      context: .
-      dockerfile: services/indexer-service/Dockerfile
-    environment:
-      DB_URL: postgresql://agent:agentpass@postgres:5432/agent_exchange
-      BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
-    depends_on:
-      postgres: { condition: service_healthy }
     restart: unless-stopped
 
   prometheus:

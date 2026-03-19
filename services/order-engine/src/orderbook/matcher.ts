@@ -61,14 +61,24 @@ export async function matchOrder(incoming: Order): Promise<OrderResult> {
 
   const incomingAgentId = await upsertAgent(incoming.agentWallet);
 
-  // Lock funds for limit orders going to the book (market orders fill immediately)
-  if (incoming.type === 'limit') {
-    if (incoming.side === 'buy') {
-      const lockUsdc = (parseFloat(incoming.amount) * parseFloat(incoming.price)).toFixed(6);
-      await lockForBuy(incoming.agentWallet, lockUsdc);
+  // Lock funds before any fills — applies to both limit and market orders
+  if (incoming.side === 'buy') {
+    let lockPrice: string;
+    if (incoming.type === 'limit') {
+      lockPrice = incoming.price;
     } else {
-      await lockForSell(incoming.agentWallet, incoming.amount);
+      // Market buy: lock at worst-case ask (first ask in book)
+      const topAsks = await getBestAsks(incoming.pair, 1);
+      if (topAsks.length === 0) {
+        return { orderId: incoming.orderId, status: 'cancelled', filledAmount: '0', avgPrice: '0', trades: [] };
+      }
+      lockPrice = topAsks[0].price;
     }
+    const lockUsdc = (parseFloat(incoming.amount) * parseFloat(lockPrice)).toFixed(6);
+    await lockForBuy(incoming.agentWallet, lockUsdc);
+  } else {
+    // Sell (limit or market): lock the ETH amount
+    await lockForSell(incoming.agentWallet, incoming.amount);
   }
 
   // Persist incoming order first so trades can reference its order_id via FK

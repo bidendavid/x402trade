@@ -1,13 +1,11 @@
 import { ethers } from 'ethers';
 import { getRedis } from '../lib/redis';
-import { USDC_CONTRACT, BASE_RPC_URL, X402_PAYMENT_ADDRESS } from './config';
 
 export interface X402Payment {
   wallet: string;
   signature: string;
-  message: string;
-  transactionHash: string;
   amount: string;
+  nonce: string; // ms timestamp as string
 }
 
 export interface VerifyResult {
@@ -21,71 +19,44 @@ export function parseX402Header(header: string): X402Payment {
   return JSON.parse(decoded) as X402Payment;
 }
 
+/** Agent signs: `x402:<nonce>:<amount>` */
+export function buildSignMessage(nonce: string, amount: string): string {
+  return `x402:${nonce}:${amount}`;
+}
+
 export async function verifySignature(payment: X402Payment): Promise<boolean> {
   try {
-    const recovered = ethers.verifyMessage(payment.message, payment.signature);
+    const msg = buildSignMessage(payment.nonce, payment.amount);
+    const recovered = ethers.verifyMessage(msg, payment.signature);
     return recovered.toLowerCase() === payment.wallet.toLowerCase();
   } catch {
     return false;
   }
 }
 
-export async function verifyUSDCTransfer(
-  txHash: string,
-  expectedAmount: string,
-  toAddress: string
-): Promise<boolean> {
-  // Skip on-chain check in dev mode (no payment address configured)
-  if (!toAddress) return true;
-
-  try {
-    const provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
-    const receipt = await provider.getTransactionReceipt(txHash);
-    if (!receipt || receipt.status !== 1) return false;
-
-    const iface = new ethers.Interface([
-      'event Transfer(address indexed from, address indexed to, uint256 value)',
-    ]);
-
-    for (const log of receipt.logs) {
-      if (log.address.toLowerCase() !== USDC_CONTRACT.toLowerCase()) continue;
-      try {
-        const parsed = iface.parseLog({ topics: log.topics as string[], data: log.data });
-        if (!parsed) continue;
-        if (
-          parsed.args.to.toLowerCase() === toAddress.toLowerCase() &&
-          parsed.args.value.toString() === expectedAmount
-        ) {
-          return true;
-        }
-      } catch {
-        // not a Transfer event
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
+/** Nonce must be within ±5 minutes of server time */
+export function isNonceFresh(nonce: string): boolean {
+  const ts = parseInt(nonce);
+  if (isNaN(ts)) return false;
+  return Math.abs(Date.now() - ts) < 5 * 60 * 1000;
 }
 
-export async function checkReplay(txHash: string): Promise<boolean> {
+export async function checkReplay(wallet: string, nonce: string): Promise<boolean> {
   const redis = getRedis();
-  const exists = await redis.exists(`x402:used:${txHash}`);
-  return exists === 1;
+  return (await redis.exists(`x402:nonce:${wallet.toLowerCase()}:${nonce}`)) === 1;
 }
 
-export async function markPaymentUsed(txHash: string): Promise<void> {
+export async function markNonceUsed(wallet: string, nonce: string): Promise<void> {
   const redis = getRedis();
-  await redis.set(`x402:used:${txHash}`, '1', 'EX', 7 * 24 * 3600);
+  await redis.set(`x402:nonce:${wallet.toLowerCase()}:${nonce}`, '1', 'EX', 600);
 }
 
 export async function checkBlacklist(wallet: string): Promise<boolean> {
   const redis = getRedis();
-  const exists = await redis.exists(`blacklist:${wallet.toLowerCase()}`);
-  return exists === 1;
+  return (await redis.exists(`blacklist:${wallet.toLowerCase()}`)) === 1;
 }
 
-export async function verifyX402Payment(header: string): Promise<VerifyResult> {
+export async function verifyX402Payment(header: string, requiredAmount: string): Promise<VerifyResult> {
   let payment: X402Payment;
   try {
     payment = parseX402Header(header);
@@ -93,8 +64,16 @@ export async function verifyX402Payment(header: string): Promise<VerifyResult> {
     return { valid: false, reason: 'Invalid payment header format' };
   }
 
-  if (!payment.wallet || !payment.signature || !payment.message || !payment.transactionHash || !payment.amount) {
-    return { valid: false, reason: 'Missing required payment fields' };
+  if (!payment.wallet || !payment.signature || !payment.amount || !payment.nonce) {
+    return { valid: false, reason: 'Missing required fields: wallet, signature, amount, nonce' };
+  }
+
+  if (!isNonceFresh(payment.nonce)) {
+    return { valid: false, reason: 'Nonce expired — must be within 5 minutes of server time' };
+  }
+
+  if (parseFloat(payment.amount) < parseFloat(requiredAmount)) {
+    return { valid: false, reason: `Insufficient payment: required ${requiredAmount} USDC, sent ${payment.amount}` };
   }
 
   const sigValid = await verifySignature(payment);
@@ -102,26 +81,15 @@ export async function verifyX402Payment(header: string): Promise<VerifyResult> {
     return { valid: false, reason: 'Invalid signature' };
   }
 
-  const isReplay = await checkReplay(payment.transactionHash);
+  const isReplay = await checkReplay(payment.wallet, payment.nonce);
   if (isReplay) {
-    return { valid: false, reason: 'Payment already used' };
+    return { valid: false, reason: 'Nonce already used' };
   }
 
   const isBlacklisted = await checkBlacklist(payment.wallet);
   if (isBlacklisted) {
     return { valid: false, reason: 'Agent blacklisted' };
   }
-
-  const transferValid = await verifyUSDCTransfer(
-    payment.transactionHash,
-    payment.amount,
-    X402_PAYMENT_ADDRESS
-  );
-  if (!transferValid) {
-    return { valid: false, reason: 'USDC transfer not confirmed' };
-  }
-
-  await markPaymentUsed(payment.transactionHash);
 
   return { valid: true, payment };
 }

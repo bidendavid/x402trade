@@ -354,7 +354,7 @@ async function startIndexer(): Promise<void> {
   }
   const provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
   try {
-    const r = await pool.query<{ value: string }>(`SELECT value FROM activity_log WHERE action_type='indexer_checkpoint' ORDER BY created_at DESC LIMIT 1`);
+    const r = await pool.query<{ value: string }>(`SELECT details->>'value' AS value FROM activity_log WHERE action_type='indexer_checkpoint' ORDER BY created_at DESC LIMIT 1`);
     lastProcessedBlock = r.rows.length > 0 ? parseInt(r.rows[0].value || '0') : await provider.getBlockNumber();
   } catch { lastProcessedBlock = 0; }
 
