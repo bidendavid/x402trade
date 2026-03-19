@@ -596,19 +596,20 @@
           <span class="code-topbar-label">agent.ts</span>
         </div>
         <pre><span class="c-comment">// Build x402 payment header</span>
-<span class="c-keyword">const</span> <span class="c-var">msg</span> = <span class="c-func">JSON.stringify</span>({
-  <span class="c-key">endpoint</span>: <span class="c-string">'/trade'</span>,
-  <span class="c-key">amount</span>:   <span class="c-string">'0.01'</span>,
-  <span class="c-key">nonce</span>:    <span class="c-func">Date</span>.<span class="c-func">now</span>(),
-});
-<span class="c-keyword">const</span> <span class="c-var">sig</span> = <span class="c-keyword">await</span> wallet.<span class="c-func">signMessage</span>(msg);
+<span class="c-keyword">const</span> <span class="c-var">nonce</span>  = <span class="c-func">Date</span>.<span class="c-func">now</span>().<span class="c-func">toString</span>();
+<span class="c-keyword">const</span> <span class="c-var">amount</span> = <span class="c-string">'0.01'</span>;
+<span class="c-keyword">const</span> <span class="c-var">sig</span>    = <span class="c-keyword">await</span> wallet.<span class="c-func">signMessage</span>(<span class="c-string">`x402:${nonce}:${amount}`</span>);
+<span class="c-keyword">const</span> <span class="c-var">header</span> = <span class="c-func">btoa</span>(<span class="c-func">JSON.stringify</span>(
+  { wallet: wallet.address, signature: sig, amount, nonce }
+));
 
-<span class="c-comment">// Place limit / buy order</span>
-<span class="c-keyword">const</span> <span class="c-var">res</span> = <span class="c-keyword">await</span> <span class="c-func">fetch</span>(<span class="c-string">'https://api.x402trade.io/trade'</span>, {
+<span class="c-comment">// Place limit buy order</span>
+<span class="c-keyword">const</span> <span class="c-var">res</span> = <span class="c-keyword">await</span> <span class="c-func">fetch</span>(<span class="c-string">'https://x402trade.vercel.app/trade'</span>, {
   <span class="c-key">method</span>: <span class="c-string">'POST'</span>,
-  <span class="c-key">headers</span>: { <span class="c-string">'x402-payment'</span>: <span class="c-func">btoa</span>(<span class="c-func">JSON.stringify</span>(
-    { wallet, sig, msg, amount: <span class="c-string">'0.01'</span> }
-  ))},
+  <span class="c-key">headers</span>: {
+    <span class="c-string">'Content-Type'</span>: <span class="c-string">'application/json'</span>,
+    <span class="c-string">'x402-payment'</span>: header,
+  },
   <span class="c-key">body</span>: <span class="c-func">JSON.stringify</span>({
     <span class="c-key">pair</span>: <span class="c-string">'ETH-USDC'</span>, <span class="c-key">side</span>: <span class="c-string">'buy'</span>,
     <span class="c-key">type</span>: <span class="c-string">'limit'</span>, <span class="c-key">amount</span>: <span class="c-string">'0.1'</span>, <span class="c-key">price</span>: <span class="c-string">'2200'</span>,

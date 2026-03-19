@@ -71,18 +71,19 @@ import { ethers } from 'ethers';
 
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY);
 
-// Build x402 payment header
-const message = JSON.stringify({ endpoint: '/trade', amount: '0.01', nonce: Date.now() });
-const signature = await wallet.signMessage(message);
+// Build x402 payment header — sign `x402:<nonce>:<amount>`
+const nonce  = Date.now().toString();
+const amount = '0.01';
+const signature = await wallet.signMessage(`x402:${nonce}:${amount}`);
 const paymentHeader = Buffer.from(JSON.stringify({
   wallet: wallet.address,
   signature,
-  message,
-  amount: '0.01',
+  amount,
+  nonce,
 })).toString('base64');
 
 // Place a limit order
-const res = await fetch('http://localhost:8080/trade', {
+const res = await fetch('https://x402trade.vercel.app/trade', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -102,7 +103,7 @@ const res = await fetch('http://localhost:8080/trade', {
 
 ## API Reference
 
-All endpoints require the `x402-payment` header (base64-encoded JSON with wallet, signature, message, amount).
+All endpoints require the `x402-payment` header: base64-encoded JSON `{ wallet, signature, amount, nonce }` where signature covers `x402:<nonce>:<amount>`. Agent must have sufficient USDC balance (deposited via `POST /deposit`).
 
 ### Orders
 
