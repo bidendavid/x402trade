@@ -1,0 +1,24 @@
+{
+  "name": "@x402trade/mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for x402Trade — lets AI agents (Claude, Cursor, etc.) trade on x402Trade",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "x402-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
