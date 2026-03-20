@@ -1,0 +1,19 @@
+{
+  "name": "x402trade-market-maker",
+  "version": "1.0.0",
+  "description": "Example market maker agent for x402Trade — fork and run to provide liquidity",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "start:prod": "node dist/index.js"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
