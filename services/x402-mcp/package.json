@@ -1,5 +1,5 @@
 {
-  "name": "@x402trade/mcp-server",
+  "name": "x402trade-mcp",
   "version": "1.0.0",
   "description": "MCP server for x402Trade — lets AI agents (Claude, Cursor, etc.) trade on x402Trade",
   "type": "module",
