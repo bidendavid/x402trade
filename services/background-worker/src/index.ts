@@ -15,7 +15,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
 import { ethers } from 'ethers';
 import { Pool } from 'pg';
@@ -275,31 +275,48 @@ app.post('/check', async (req: Request, res: Response) => {
   } catch (err) { console.error('[risk] /check error:', err); res.status(500).json({ allowed: false, reason: 'risk_service_error' }); }
 });
 
-app.post('/blacklist/:wallet', async (req: Request, res: Response) => {
+// ── Admin auth middleware ──────────────────────────────────────────────────
+// ADMIN_SECRET must be set to enable these endpoints.
+// Called internally only (not internet-facing), but defense-in-depth.
+function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) {
+    res.status(503).json({ error: 'Admin endpoints disabled — set ADMIN_SECRET to enable' });
+    return;
+  }
+  const auth = req.headers['authorization'];
+  if (auth !== `Bearer ${secret}`) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  next();
+}
+
+app.post('/blacklist/:wallet', requireAdmin, async (req: Request, res: Response) => {
   const { wallet } = req.params;
   const { reason = 'manual' } = req.body as { reason?: string };
   try {
     await pool.query(`UPDATE agents SET is_blacklisted=true, is_active=false, updated_at=NOW() WHERE wallet_address=$1`, [wallet.toLowerCase()]);
     await redis.set(`blacklist:${wallet.toLowerCase()}`, reason, 'EX', 30 * 24 * 3600);
     res.json({ success: true, wallet, reason });
-  } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  } catch (err) { console.error('[admin] blacklist error:', (err as Error).message); res.status(500).json({ error: 'Operation failed' }); }
 });
 
-app.delete('/blacklist/:wallet', async (req: Request, res: Response) => {
+app.delete('/blacklist/:wallet', requireAdmin, async (req: Request, res: Response) => {
   const { wallet } = req.params;
   try {
     await pool.query(`UPDATE agents SET is_blacklisted=false, is_active=true, score=50, updated_at=NOW() WHERE wallet_address=$1`, [wallet.toLowerCase()]);
     await redis.del(`blacklist:${wallet.toLowerCase()}`);
     res.json({ success: true, wallet });
-  } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  } catch (err) { console.error('[admin] unblacklist error:', (err as Error).message); res.status(500).json({ error: 'Operation failed' }); }
 });
 
-app.patch('/score/:wallet', async (req: Request, res: Response) => {
+app.patch('/score/:wallet', requireAdmin, async (req: Request, res: Response) => {
   const { wallet } = req.params;
   const { delta } = req.body as { delta: number };
   if (typeof delta !== 'number') { res.status(400).json({ error: 'delta required' }); return; }
   try { res.json({ wallet, score: await updateScore(wallet, delta) }); }
-  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  catch (err) { console.error('[admin] score error:', (err as Error).message); res.status(500).json({ error: 'Operation failed' }); }
 });
 
 app.listen(PORT, () => console.log(`background-worker listening on port ${PORT}`));

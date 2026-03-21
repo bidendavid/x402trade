@@ -25,7 +25,8 @@ async function verifyApiKey(rawKey: string): Promise<{ valid: boolean; wallet?: 
     if (result.rows.length === 0) return { valid: false };
     const row = result.rows[0];
     // Update last_used_at non-blocking
-    pool.query('UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(() => {});
+    pool.query('UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash])
+      .catch((err: Error) => console.warn('[api-key] last_used_at update failed:', err.message));
     return { valid: true, wallet: row.wallet_address as string, permissions: row.permissions as string };
   } catch {
     return { valid: false };

@@ -1,4 +1,10 @@
-/** Validate Ethereum wallet address format (0x + 40 hex chars). */
+import { ethers } from 'ethers';
+
+/** Validate Ethereum wallet address — checks format AND EIP-55 checksum. */
 export function isValidAddress(addr: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/.test(addr);
+  try {
+    return ethers.isAddress(addr);
+  } catch {
+    return false;
+  }
 }

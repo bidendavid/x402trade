@@ -34,11 +34,13 @@ export async function verifySignature(payment: X402Payment): Promise<boolean> {
   }
 }
 
-/** Nonce must be within ±5 minutes of server time */
+/** Nonce must be within ±5 minutes of server time and not in the future by >30s */
 export function isNonceFresh(nonce: string): boolean {
   const ts = parseInt(nonce);
-  if (isNaN(ts)) return false;
-  return Math.abs(Date.now() - ts) < 5 * 60 * 1000;
+  if (isNaN(ts) || ts <= 0) return false;
+  const now = Date.now();
+  if (ts > now + 30_000) return false;          // too far in the future
+  return now - ts < 5 * 60 * 1000;             // not older than 5 minutes
 }
 
 export async function checkReplay(wallet: string, nonce: string): Promise<boolean> {

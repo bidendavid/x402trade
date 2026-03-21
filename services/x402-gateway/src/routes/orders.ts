@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../lib/db';
+import { isValidPair } from '../lib/validate';
 
 const router = Router();
 
@@ -18,6 +19,10 @@ router.get('/orders', async (req: Request, res: Response) => {
     conditions.push(`a.wallet_address = $${params.length}`);
   }
   if (pair) {
+    if (!isValidPair(pair)) {
+      res.status(400).json({ error: 'Invalid pair' });
+      return;
+    }
     params.push(pair);
     conditions.push(`o.pair = $${params.length}`);
   }
@@ -38,7 +43,8 @@ router.get('/orders', async (req: Request, res: Response) => {
     );
     res.json({ orders: result.rows, total: result.rowCount });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch orders', message: (err as Error).message });
+    console.error('[orders] fetch error:', (err as Error).message);
+    res.status(500).json({ error: 'Failed to fetch orders' });
   }
 });
 

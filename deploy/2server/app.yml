@@ -70,6 +70,8 @@ services:
       DB_URL: postgresql://agent:${DB_PASSWORD}@${DB_HOST}:5432/agent_exchange
       NATS_URL: nats://nats:4222
       BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
+      ADMIN_SECRET: ${ADMIN_SECRET}
+      NODE_ENV: production
     depends_on:
       nats: { condition: service_healthy }
     healthcheck:
