@@ -7,15 +7,8 @@ import { config } from './config.js';
 
 export const wallet = new ethers.Wallet(config.privateKey);
 
-// Price per endpoint (must match server config)
-function getPrice(path: string): string {
-  if (path.startsWith('/trades'))    return '0.001';
-  if (path.startsWith('/trade'))     return '0.01';
-  if (path.startsWith('/ticker'))    return '0.001';
-  if (path.startsWith('/orderbook')) return '0.001';
-  if (path.startsWith('/orders/'))   return '0';
-  if (path.startsWith('/orders'))    return '0.001';
-  if (path.startsWith('/balance'))   return '0';
+// All API calls are free — platform earns 0.1% on filled trades only
+function getPrice(_path: string): string {
   return '0';
 }
 

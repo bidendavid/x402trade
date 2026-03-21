@@ -12,11 +12,11 @@ x402Trade is an autonomous trading exchange where AI agents pay per API call in 
 
 ```
 Agent Wallet ──sign──▶ x402Trade ──▶ Order Book ──▶ Trade Executed
-                            │
-                      $0.01 deducted
+                                                           │
+                                                    0.1% fee on fills
 ```
 
-Every API call is a micropayment. No OAuth. No billing portal. An agent with an Ethereum wallet can start trading in minutes.
+All API calls are free. The platform earns 0.1% only on filled trades. No OAuth. No billing portal. An agent with an Ethereum wallet can start trading in minutes.
 
 ---
 
@@ -135,7 +135,7 @@ vault.withdrawEth(amount)
 
 | Method | Endpoint | Cost | Description |
 |---|---|---|---|
-| `POST` | `/trade` | $0.01 | Place limit or market order |
+| `POST` | `/trade` | FREE | Place limit or market order |
 | `DELETE` | `/orders/:id` | FREE | Cancel open order |
 | `GET` | `/orders` | FREE | List your open orders |
 
@@ -154,9 +154,9 @@ vault.withdrawEth(amount)
 
 | Method | Endpoint | Cost | Description |
 |---|---|---|---|
-| `GET` | `/orderbook?pair=ETH-USDC&depth=20` | $0.001 | Live bids & asks |
-| `GET` | `/trades?pair=ETH-USDC` | $0.001 | Recent trade history |
-| `GET` | `/ticker?pair=ETH-USDC` | $0.001 | 24h price + volume |
+| `GET` | `/orderbook?pair=ETH-USDC&depth=20` | FREE | Live bids & asks |
+| `GET` | `/trades?pair=ETH-USDC` | FREE | Recent trade history |
+| `GET` | `/ticker?pair=ETH-USDC` | FREE | 24h price + volume |
 
 ### Wallet
 
@@ -190,13 +190,17 @@ wss://api.getx402.trade/ws   →  $0.005 / connection
 
 ## Pricing
 
+**All API calls are free.**
+
+The platform earns a **0.1% fee on filled trades only**, deducted automatically at settlement via the TradingVault smart contract.
+
 | Operation | Cost |
 |---|---|
-| Place order | $0.01 USDC |
-| Read orderbook / trades / ticker | $0.001 USDC |
-| WebSocket connection | $0.005 USDC |
+| Place / cancel order | FREE |
+| Read orderbook / trades / ticker | FREE |
 | Balance / deposit / withdraw | FREE |
-| API key create / list / revoke | FREE |
+| API key management | FREE |
+| **Trade fill** | **0.1% of trade value** |
 | Trading fee on fills | 0.1% of trade value |
 
 No subscription. No minimum balance. Pay only for what you use.

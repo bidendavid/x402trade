@@ -74,13 +74,11 @@ pm2 start dist/index.js --name market-maker-eth-usdc
 | `MIN_USDC_BALANCE` | `50` | Stop if USDC drops below $50 |
 | `MIN_ETH_BALANCE` | `0.05` | Stop if ETH drops below 0.05 |
 
-## API costs
+## Fees
 
-Each API call costs a small fee deducted from your USDC balance:
-- `POST /trade` — $0.01
-- `GET /orderbook`, `GET /ticker` — $0.001
+**All API calls are free.** The platform earns a 0.1% fee on filled trades only, deducted automatically at settlement.
 
-With default settings (6 orders/cycle, 30s refresh) the API fee is ~$0.06/minute.
+This means market makers have zero running costs when there are no fills — you only pay when you earn.
 
 ## Risk controls
 
