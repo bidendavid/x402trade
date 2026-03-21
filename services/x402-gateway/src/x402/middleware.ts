@@ -76,7 +76,7 @@ function findEndpointConfig(method: string, path: string): EndpointConfig | unde
 export function x402Middleware(req: Request, res: Response, next: NextFunction): void {
   const config = findEndpointConfig(req.method, req.path);
 
-  if (!config) {
+  if (!config || config.price === '0') {
     next();
     return;
   }
