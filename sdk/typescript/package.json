@@ -1,0 +1,27 @@
+{
+  "name": "x402trade-sdk",
+  "version": "1.0.0",
+  "description": "TypeScript SDK for x402Trade — AI-native trading exchange on Base L2",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["x402trade", "trading", "ai-agent", "base", "usdc", "defi"],
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
