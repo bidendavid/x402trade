@@ -595,9 +595,9 @@
           <div class="dot dot-gray"></div>
           <span class="code-topbar-label">agent.ts</span>
         </div>
-        <pre><span class="c-comment">// Build x402 payment header</span>
+        <pre><span class="c-comment">// Build x402 payment header (all endpoints are free)</span>
 <span class="c-keyword">const</span> <span class="c-var">nonce</span>  = <span class="c-func">Date</span>.<span class="c-func">now</span>().<span class="c-func">toString</span>();
-<span class="c-keyword">const</span> <span class="c-var">amount</span> = <span class="c-string">'0.01'</span>;
+<span class="c-keyword">const</span> <span class="c-var">amount</span> = <span class="c-string">'0'</span>;
 <span class="c-keyword">const</span> <span class="c-var">sig</span>    = <span class="c-keyword">await</span> wallet.<span class="c-func">signMessage</span>(<span class="c-string">`x402:${nonce}:${amount}`</span>);
 <span class="c-keyword">const</span> <span class="c-var">header</span> = <span class="c-func">btoa</span>(<span class="c-func">JSON.stringify</span>(
   { wallet: wallet.address, signature: sig, amount, nonce }
@@ -625,7 +625,7 @@
     <div class="container">
     <div class="section-label">FULL API REFERENCE</div>
     <h2>Everything Your Agent Needs</h2>
-    <p class="section-sub">REST + WebSocket. Every endpoint priced transparently.</p>
+    <p class="section-sub">REST + WebSocket. All API calls are free — platform earns 0.1% on fills only.</p>
     <div class="api-table-wrap">
       <table class="api-table">
         <thead>
@@ -638,17 +638,17 @@
         <tbody>
           <tr>
             <td><span class="method post">POST</span>&nbsp; <span class="endpoint">/trade</span></td>
-            <td><span class="price">$0.01</span></td>
+            <td><span class="price free">FREE</span></td>
             <td class="desc">Place limit or market order</td>
           </tr>
           <tr>
             <td><span class="method get">GET</span>&nbsp;&nbsp; <span class="endpoint">/orderbook</span></td>
-            <td><span class="price">$0.001</span></td>
+            <td><span class="price free">FREE</span></td>
             <td class="desc">Live bids &amp; asks with depth</td>
           </tr>
           <tr>
             <td><span class="method get">GET</span>&nbsp;&nbsp; <span class="endpoint">/trades</span></td>
-            <td><span class="price">$0.001</span></td>
+            <td><span class="price free">FREE</span></td>
             <td class="desc">Recent trade history by pair</td>
           </tr>
           <tr>
@@ -663,8 +663,13 @@
           </tr>
           <tr>
             <td><span class="method ws">WS</span>&nbsp;&nbsp;&nbsp; <span class="endpoint">/ws</span></td>
-            <td><span class="price">$0.005</span></td>
+            <td><span class="price free">FREE</span></td>
             <td class="desc">Real-time orderbook, trades, fills</td>
+          </tr>
+          <tr>
+            <td colspan="1" style="color: var(--gray1);">Trade fill</td>
+            <td><span class="price">0.1%</span></td>
+            <td class="desc">Fee on filled trade value only</td>
           </tr>
         </tbody>
       </table>
@@ -676,22 +681,22 @@
   <section id="pricing">
     <div class="container">
     <div class="section-label">PRICING</div>
-    <h2>No Subscriptions. Ever.</h2>
-    <p class="section-sub">Pay only for what you use. Costs are deducted from your USDC balance on each call.</p>
+    <h2>No Subscriptions. No API Fees. Ever.</h2>
+    <p class="section-sub">All API calls are free. We earn only when you trade — 0.1% on filled trades, deducted automatically.</p>
     <div class="problem-grid" style="max-width: 800px;">
       <div class="problem-card" style="grid-column: span 1;">
         <div class="section-label" style="margin-bottom: 8px;">TRADING</div>
-        <div style="font-family: var(--mono); font-size: 40px; font-weight: 700; color: var(--white); margin-bottom: 8px;">$0.01</div>
-        <p style="color: var(--gray1); font-size: 14px;">per order placed<br/>+ 0.3% of trade value</p>
+        <div style="font-family: var(--mono); font-size: 40px; font-weight: 700; color: var(--white); margin-bottom: 8px;">FREE</div>
+        <p style="color: var(--gray1); font-size: 14px;">place &amp; cancel orders<br/>0.1% fee on fills only</p>
       </div>
       <div class="problem-card">
         <div class="section-label" style="margin-bottom: 8px;">MARKET DATA</div>
-        <div style="font-family: var(--mono); font-size: 40px; font-weight: 700; color: var(--white); margin-bottom: 8px;">$0.001</div>
-        <p style="color: var(--gray1); font-size: 14px;">per query<br/>orderbook, trades, ticker</p>
+        <div style="font-family: var(--mono); font-size: 40px; font-weight: 700; color: var(--white); margin-bottom: 8px;">FREE</div>
+        <p style="color: var(--gray1); font-size: 14px;">orderbook, trades, ticker<br/>no limits</p>
       </div>
       <div class="problem-card">
         <div class="section-label" style="margin-bottom: 8px;">STREAMING</div>
-        <div style="font-family: var(--mono); font-size: 40px; font-weight: 700; color: var(--white); margin-bottom: 8px;">$0.005</div>
+        <div style="font-family: var(--mono); font-size: 40px; font-weight: 700; color: var(--white); margin-bottom: 8px;">FREE</div>
         <p style="color: var(--gray1); font-size: 14px;">per WebSocket connection<br/>unlimited messages</p>
       </div>
     </div>
