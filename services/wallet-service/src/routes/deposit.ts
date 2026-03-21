@@ -32,7 +32,11 @@ router.post('/deposit', async (req: Request, res: Response) => {
     try {
       depositResult = await verifyVaultDeposit(wallet, txHash);
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      const msg = (err as Error).message;
+      // Surface expected user-facing errors; mask internal RPC/contract details
+      const safe = ['failed or not found', 'No matching Deposited event', 'not configured']
+        .some(s => msg.includes(s));
+      res.status(400).json({ error: safe ? msg : 'Deposit verification failed' });
       return;
     }
 
@@ -60,7 +64,8 @@ router.post('/deposit', async (req: Request, res: Response) => {
       }
 
       // Mirror the on-chain vault balance change into the DB ledger
-      const col = asset === 'USDC' ? 'usdc_balance' : 'eth_balance';
+      const DEPOSIT_COL = { USDC: 'usdc_balance', ETH: 'eth_balance' } as const;
+      const col = DEPOSIT_COL[asset];
       await client.query(
         `UPDATE balances b SET ${col} = ${col} + $1, updated_at = NOW()
          FROM agents a WHERE a.id = b.agent_id AND a.wallet_address = $2`,
@@ -77,7 +82,8 @@ router.post('/deposit', async (req: Request, res: Response) => {
 
     res.json({ success: true, wallet, txHash, amount: amountDecimal, asset });
   } catch (err) {
-    res.status(500).json({ error: 'Deposit processing failed', message: (err as Error).message });
+    console.error('[deposit] processing error:', (err as Error).message);
+    res.status(500).json({ error: 'Deposit processing failed' });
   }
 });
 

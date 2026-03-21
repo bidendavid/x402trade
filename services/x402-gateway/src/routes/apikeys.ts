@@ -106,7 +106,8 @@ router.post('/api-key/create', async (req: Request, res: Response) => {
       warning:    'Save this key now — it will NOT be shown again.',
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create API key', message: (err as Error).message });
+    console.error('[api-key] create error:', (err as Error).message);
+    res.status(500).json({ error: 'Failed to create API key' });
   }
 });
 
@@ -144,7 +145,8 @@ router.get('/api-key/list', async (req: Request, res: Response) => {
     );
     res.json({ keys: result.rows });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to list keys', message: (err as Error).message });
+    console.error('[api-key] list error:', (err as Error).message);
+    res.status(500).json({ error: 'Failed to list keys' });
   }
 });
 
@@ -191,7 +193,8 @@ router.post('/api-key/revoke', async (req: Request, res: Response) => {
     }
     res.json({ success: true, keyId, revoked: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to revoke key', message: (err as Error).message });
+    console.error('[api-key] revoke error:', (err as Error).message);
+    res.status(500).json({ error: 'Failed to revoke key' });
   }
 });
 

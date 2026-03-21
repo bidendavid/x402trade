@@ -76,6 +76,11 @@ export async function getBalance(walletAddress: string): Promise<BalanceRow | nu
   return result.rows[0] || null;
 }
 
+const ASSET_COL: Record<'usdc' | 'eth', 'usdc_balance' | 'eth_balance'> = {
+  usdc: 'usdc_balance',
+  eth:  'eth_balance',
+};
+
 export async function creditBalance(
   walletAddress: string,
   amount: string,
@@ -83,7 +88,8 @@ export async function creditBalance(
 ): Promise<void> {
   const pool = getPool();
   const agent = await getOrCreateAgent(walletAddress);
-  const col = asset === 'usdc' ? 'usdc_balance' : 'eth_balance';
+  const col = ASSET_COL[asset];
+  if (!col) throw new Error('Invalid asset');
   await pool.query(
     `UPDATE balances SET ${col} = ${col} + $1, updated_at = NOW() WHERE agent_id = $2`,
     [amount, agent.id]
@@ -247,10 +253,7 @@ export async function settleTradeTransaction(
   if (process.env.TRADING_VAULT_ADDRESS && process.env.EXCHANGE_BACKEND_KEY) {
     const netUsdcForChain = (parseFloat(usdcTotal) - parseFloat(fee)).toFixed(6);
     settleOnChain(buyerWallet, sellerWallet, netUsdcForChain, ethAmount).catch((err) => {
-      console.error(
-        `[vault] on-chain settle failed (buyer=${buyerWallet} seller=${sellerWallet}):`,
-        (err as Error).message,
-      );
+      console.error('[vault] on-chain settle failed:', (err as Error).message);
     });
   }
 }

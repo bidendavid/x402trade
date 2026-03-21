@@ -72,7 +72,8 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       await client.query('BEGIN');
 
       // Lock balance in DB (prevent double-spend) — must succeed before chain call
-      const col = assetUpper === 'USDC' ? 'usdc_balance' : 'eth_balance';
+      const WITHDRAW_COL = { USDC: 'usdc_balance', ETH: 'eth_balance' } as const;
+      const col = WITHDRAW_COL[assetUpper];
       const checkResult = await client.query(
         `SELECT b.${col} FROM balances b WHERE b.agent_id = $1 FOR UPDATE`,
         [agent.id]
@@ -145,7 +146,8 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       txHash = tx.hash;
     } catch (chainErr) {
       // Roll back the DB deduction so the user's balance is restored
-      const col2 = assetUpper === 'USDC' ? 'usdc_balance' : 'eth_balance';
+      const ROLLBACK_COL = { USDC: 'usdc_balance', ETH: 'eth_balance' } as const;
+      const col2 = ROLLBACK_COL[assetUpper];
       await pool.query(
         `UPDATE balances SET ${col2} = ${col2} + $1, updated_at = NOW() WHERE agent_id = $2`,
         [amount, agent.id]
@@ -154,7 +156,8 @@ router.post('/withdraw', async (req: Request, res: Response) => {
         `UPDATE payments SET status = 'failed' WHERE payment_hash = $1`,
         [withdrawId]
       );
-      res.status(502).json({ error: 'On-chain withdrawal failed', message: (chainErr as Error).message });
+      console.error('[withdraw] on-chain withdrawal failed:', (chainErr as Error).message);
+      res.status(502).json({ error: 'On-chain withdrawal failed' });
       return;
     }
 
@@ -167,7 +170,8 @@ router.post('/withdraw', async (req: Request, res: Response) => {
 
     res.json({ success: true, withdrawId, txHash, wallet, amount, asset: assetUpper });
   } catch (err) {
-    res.status(500).json({ error: 'Withdraw failed', message: (err as Error).message });
+    console.error('[withdraw] error:', (err as Error).message);
+    res.status(500).json({ error: 'Withdraw failed' });
   }
 });
 
