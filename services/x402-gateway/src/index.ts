@@ -12,6 +12,7 @@ import ordersRouter from './routes/orders';
 import tickerRouter from './routes/ticker';
 import balanceRouter from './routes/balance';
 import cancelRouter from './routes/cancel';
+import apikeysRouter from './routes/apikeys';
 import {
   httpRequestDuration,
   httpRequestsTotal,
@@ -40,6 +41,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // x402 payment verification middleware (per-endpoint config in x402/config.ts)
 app.use(x402Middleware);
 
+app.use(apikeysRouter);  // no x402 auth — uses wallet signature instead
 app.use(tradeRouter);
 app.use(orderbookRouter);
 app.use(ordersRouter);

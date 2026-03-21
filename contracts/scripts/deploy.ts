@@ -2,7 +2,7 @@ import { ethers } from 'hardhat';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const USDC_BASE_MAINNET  = '0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C';
+const USDC_BASE_MAINNET  = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const USDC_BASE_SEPOLIA  = process.env.USDC_BASE_SEPOLIA || USDC_BASE_MAINNET;
 
 const TOKENS = {
@@ -32,29 +32,20 @@ async function main() {
   const agentWalletAddr = await agentWallet.getAddress();
   console.log(`  AgentWallet → ${agentWalletAddr}`);
 
-  // Deploy AgentExchangeCore
-  console.log('Deploying AgentExchangeCore...');
-  const AgentExchangeCore = await ethers.getContractFactory('AgentExchangeCore');
-  const exchangeCore = await AgentExchangeCore.deploy(usdcAddress);
-  await exchangeCore.waitForDeployment();
-  const exchangeCoreAddr = await exchangeCore.getAddress();
-  console.log(`  AgentExchangeCore → ${exchangeCoreAddr}`);
+  // Deploy TradingVault
+  // EXCHANGE_BACKEND: your server's signing wallet address
+  // FEE_WALLET: address that collects platform fees
+  const backendAddr = process.env.EXCHANGE_BACKEND || deployer.address;
+  const feeWalletAddr = process.env.FEE_WALLET || deployer.address;
 
-  // Create default trading pairs on mainnet
-  if (network.chainId === 8453n) {
-    console.log('\nCreating trading pairs...');
-    for (const [name, t1] of [
-      ['USDC/WETH', TOKENS.WETH],
-      ['USDC/WBTC', TOKENS.WBTC],
-      ['USDC/USDT', TOKENS.USDT],
-      ['USDC/LINK', TOKENS.LINK],
-      ['USDC/OP',   TOKENS.OP],
-    ] as [string, string][]) {
-      const tx = await exchangeCore.createPair(TOKENS.USDC, t1);
-      await tx.wait();
-      console.log(`  ✓ ${name}`);
-    }
-  }
+  console.log('Deploying TradingVault...');
+  console.log(`  Exchange backend : ${backendAddr}`);
+  console.log(`  Fee wallet       : ${feeWalletAddr}`);
+  const TradingVault = await ethers.getContractFactory('TradingVault');
+  const vault = await TradingVault.deploy(usdcAddress, backendAddr, feeWalletAddr);
+  await vault.waitForDeployment();
+  const vaultAddr = await vault.getAddress();
+  console.log(`  TradingVault → ${vaultAddr}`);
 
   // Persist deployment record
   const record = {
@@ -63,9 +54,11 @@ async function main() {
     deployer: deployer.address,
     contracts: {
       AgentWallet: agentWalletAddr,
-      AgentExchangeCore: exchangeCoreAddr,
+      TradingVault: vaultAddr,
     },
     usdc: usdcAddress,
+    exchangeBackend: backendAddr,
+    feeWallet: feeWalletAddr,
     deployedAt: new Date().toISOString(),
   };
 

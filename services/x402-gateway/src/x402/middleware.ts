@@ -1,9 +1,36 @@
 import http from 'http';
+import { createHash } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { x402Config, EndpointConfig } from './config';
 import { verifyX402Payment, markNonceUsed, X402Payment } from './verify';
-import { deductApiPayment } from '../lib/db';
+import { deductApiPayment, getPool } from '../lib/db';
 import { x402PaymentsTotal, x402PaymentDuration, riskCheckDuration, riskRateLimited } from '../lib/metrics';
+
+// ── API Key authentication helper ──────────────────────────────────────────
+
+async function verifyApiKey(rawKey: string): Promise<{ valid: boolean; wallet?: string; permissions?: string }> {
+  if (!rawKey.startsWith('xk_')) return { valid: false };
+  const keyHash = createHash('sha256').update(rawKey).digest('hex');
+  const pool = getPool();
+  try {
+    const result = await pool.query(
+      `SELECT a.wallet_address, k.permissions
+       FROM api_keys k
+       JOIN agents a ON a.id = k.agent_id
+       WHERE k.key_hash = $1
+         AND k.revoked = false
+         AND (k.expires_at IS NULL OR k.expires_at > NOW())`,
+      [keyHash]
+    );
+    if (result.rows.length === 0) return { valid: false };
+    const row = result.rows[0];
+    // Update last_used_at non-blocking
+    pool.query('UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash]).catch(() => {});
+    return { valid: true, wallet: row.wallet_address as string, permissions: row.permissions as string };
+  } catch {
+    return { valid: false };
+  }
+}
 
 function checkRisk(wallet: string): Promise<{ allowed: boolean; reason?: string }> {
   return new Promise((resolve) => {
@@ -53,6 +80,49 @@ export function x402Middleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
+  // ── API Key fast path ──────────────────────────────────────────────────
+  const apiKey = req.headers['x-api-key'] as string | undefined;
+  if (apiKey) {
+    verifyApiKey(apiKey).then(async (result) => {
+      if (!result.valid) {
+        x402PaymentsTotal.inc({ result: 'invalid' });
+        res.status(401).json({ error: 'Invalid or expired API key' });
+        return;
+      }
+      if (config.price !== '0' && result.permissions === 'readonly') {
+        res.status(403).json({ error: 'This API key is read-only and cannot execute trades' });
+        return;
+      }
+      const wallet = result.wallet!;
+      const endRisk = riskCheckDuration.startTimer();
+      const risk = await checkRisk(wallet);
+      endRisk();
+      if (!risk.allowed) {
+        riskRateLimited.inc();
+        res.status(429).json({ error: 'Rate limited', reason: risk.reason });
+        return;
+      }
+      if (config.price !== '0') {
+        const deducted = await deductApiPayment(wallet, config.price);
+        if (!deducted) {
+          x402PaymentsTotal.inc({ result: 'insufficient' });
+          res.status(402).json({
+            error: 'Insufficient Balance',
+            reason: `Requires ${config.price} USDC. Fund via POST /deposit.`,
+            wallet,
+          });
+          return;
+        }
+      }
+      x402PaymentsTotal.inc({ result: 'valid' });
+      req.agentWallet = wallet;
+      next();
+    }).catch((err) => {
+      res.status(500).json({ error: 'API key verification failed', message: (err as Error).message });
+    });
+    return;
+  }
+
   const paymentHeader = req.headers['x402-payment'] as string | undefined;
 
   if (!paymentHeader) {
@@ -67,7 +137,7 @@ export function x402Middleware(req: Request, res: Response, next: NextFunction):
         payTo: 'internal-balance',
         network: 'base',
         token: 'USDC',
-        howTo: 'Deposit USDC via POST /deposit, then sign message `x402:<nonce>:<amount>` with your wallet',
+        howTo: 'Option 1: Create an API key via POST /api-key/create (recommended). Option 2: Sign `x402:<nonce>:<amount>` with your wallet and set X-API-Key or x402-payment header.',
       },
     });
     return;

@@ -1,19 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { ethers } from 'ethers';
 import { getPool } from '../lib/db';
 import { getOrCreateAgent } from '../lib/ledger';
+import { verifyVaultDeposit } from '../lib/vault';
 import { isValidAddress } from '../lib/validate';
 
 const router = Router();
 
 const USDC_CONTRACT = process.env.USDC_CONTRACT || '0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C';
-const DEPOSIT_ADDRESS = process.env.DEPOSIT_ADDRESS || '';
-const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
-const USDC_DECIMALS = 6;
-
-const TRANSFER_IFACE = new ethers.Interface([
-  'event Transfer(address indexed from, address indexed to, uint256 value)',
-]);
 
 router.post('/deposit', async (req: Request, res: Response) => {
   const { wallet, txHash } = req.body as { wallet: string; txHash: string };
@@ -26,56 +19,38 @@ router.post('/deposit', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'Invalid wallet address format' });
     return;
   }
-  if (!DEPOSIT_ADDRESS) {
-    res.status(503).json({ error: 'Deposit address not configured' });
+  if (!process.env.TRADING_VAULT_ADDRESS) {
+    res.status(503).json({ error: 'TradingVault address not configured' });
     return;
   }
 
   const pool = getPool();
 
   try {
-    const provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
-    const receipt = await provider.getTransactionReceipt(txHash);
-
-    if (!receipt || receipt.status !== 1) {
-      res.status(400).json({ error: 'Transaction failed or not found' });
+    // Verify the on-chain deposit in TradingVault
+    let depositResult: { amount: string; asset: 'USDC' | 'ETH' };
+    try {
+      depositResult = await verifyVaultDeposit(wallet, txHash);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
       return;
     }
 
-    let depositAmount: bigint | null = null;
-    for (const log of receipt.logs) {
-      if (log.address.toLowerCase() !== USDC_CONTRACT.toLowerCase()) continue;
-      try {
-        const parsed = TRANSFER_IFACE.parseLog({ topics: log.topics as string[], data: log.data });
-        if (!parsed) continue;
-        if (
-          parsed.args.to.toLowerCase() === DEPOSIT_ADDRESS.toLowerCase() &&
-          parsed.args.from.toLowerCase() === wallet.toLowerCase()
-        ) {
-          depositAmount = parsed.args.value as bigint;
-          break;
-        }
-      } catch { /* not a Transfer event */ }
-    }
+    const { amount: amountDecimal, asset } = depositResult;
+    const tokenAddress = asset === 'USDC' ? USDC_CONTRACT : '0x0000000000000000000000000000000000000000';
 
-    if (!depositAmount) {
-      res.status(400).json({ error: 'No matching USDC transfer found in transaction' });
-      return;
-    }
-
-    const amountDecimal = ethers.formatUnits(depositAmount, USDC_DECIMALS);
     const agent = await getOrCreateAgent(wallet);
     const client = await pool.connect();
 
     try {
       await client.query('BEGIN');
 
-      // Atomic idempotency: INSERT ... ON CONFLICT DO NOTHING is race-safe
+      // Idempotency guard — one txHash can only be credited once
       const insertResult = await client.query(
         `INSERT INTO payments (payment_hash, agent_id, endpoint, amount, token_address, status, confirmed_at)
          VALUES ($1, $2, 'deposit', $3, $4, 'confirmed', NOW())
          ON CONFLICT (payment_hash) DO NOTHING`,
-        [txHash.toLowerCase(), agent.id, amountDecimal, USDC_CONTRACT]
+        [txHash.toLowerCase(), agent.id, amountDecimal, tokenAddress]
       );
 
       if ((insertResult.rowCount ?? 0) === 0) {
@@ -84,9 +59,10 @@ router.post('/deposit', async (req: Request, res: Response) => {
         return;
       }
 
-      // Credit balance inside the same transaction
+      // Mirror the on-chain vault balance change into the DB ledger
+      const col = asset === 'USDC' ? 'usdc_balance' : 'eth_balance';
       await client.query(
-        `UPDATE balances b SET usdc_balance = usdc_balance + $1, updated_at = NOW()
+        `UPDATE balances b SET ${col} = ${col} + $1, updated_at = NOW()
          FROM agents a WHERE a.id = b.agent_id AND a.wallet_address = $2`,
         [amountDecimal, wallet.toLowerCase()]
       );
@@ -99,7 +75,7 @@ router.post('/deposit', async (req: Request, res: Response) => {
       client.release();
     }
 
-    res.json({ success: true, wallet, txHash, amount: amountDecimal, asset: 'USDC' });
+    res.json({ success: true, wallet, txHash, amount: amountDecimal, asset });
   } catch (err) {
     res.status(500).json({ error: 'Deposit processing failed', message: (err as Error).message });
   }

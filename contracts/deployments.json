@@ -1,0 +1,13 @@
+{
+  "network": "base",
+  "chainId": "8453",
+  "deployer": "0xAB9CD66C17da7E08C03567D53C125739E5C2D13c",
+  "contracts": {
+    "AgentWallet": "0xdd7D567ffc3F020398A3590CDcA6Da2bFeB5618E",
+    "TradingVault": "0xe73cB4ebe8315ecadF73a5CE2620389440a992e4"
+  },
+  "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "exchangeBackend": "0x9FD2fAfFBd5Bbec585707D489bbb5C8F2a9916F3",
+  "feeWallet": "0x9FD2fAfFBd5Bbec585707D489bbb5C8F2a9916F3",
+  "deployedAt": "2026-03-21T08:55:36.636Z"
+}

@@ -48,6 +48,11 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       NATS_URL: nats://nats:4222
       PLATFORM_FEE_WALLET: ${PLATFORM_FEE_WALLET}
+      # TradingVault contract (Base L2)
+      TRADING_VAULT_ADDRESS: ${TRADING_VAULT_ADDRESS}
+      EXCHANGE_BACKEND_KEY: ${EXCHANGE_BACKEND_KEY}
+      BASE_RPC_URL: ${BASE_RPC_URL:-https://mainnet.base.org}
+      USDC_CONTRACT: ${USDC_CONTRACT:-0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C}
     depends_on:
       nats: { condition: service_healthy }
     restart: unless-stopped

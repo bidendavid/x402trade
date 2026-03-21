@@ -1,6 +1,7 @@
 import { PoolClient } from 'pg';
 import { getPool } from './db';
 import { getRedis } from './redis';
+import { settleOnChain } from './vault';
 
 export interface AgentRow {
   id: number;
@@ -161,9 +162,12 @@ export async function debitLockedEth(walletAddress: string, ethAmount: string): 
 }
 
 /**
- * Settle a trade atomically in a single DB transaction.
- * All 4 balance mutations (buyer debit locked, buyer credit ETH,
- * seller debit locked ETH, seller credit USDC) succeed or fail together.
+ * Settle a trade: DB update first (fast path), then async on-chain settlement.
+ *
+ * The DB transaction is the source of truth for the order book.
+ * The on-chain vault.settle() call finalises custody on Base L2.
+ * If the chain call fails it is logged but does not roll back the DB —
+ * a reconciliation job can retry failed on-chain settlements later.
  */
 export async function settleTradeTransaction(
   buyerWallet: string,
@@ -203,7 +207,7 @@ export async function settleTradeTransaction(
       [netUsdc, sellerWallet.toLowerCase()]
     );
 
-    // Platform fee
+    // Platform fee (DB side)
     if (platformWallet && parseFloat(fee) > 0) {
       await client.query(
         `INSERT INTO agents (wallet_address, score, is_active, is_blacklisted)
@@ -233,5 +237,20 @@ export async function settleTradeTransaction(
       invalidateBalanceCache(buyerWallet),
       invalidateBalanceCache(sellerWallet),
     ]);
+  }
+
+  // ── On-chain settlement (async, non-blocking) ────────────────────────────
+  // vault.settle() moves funds inside TradingVault on Base.
+  // Fee is handled by the contract itself (feeBps); we pass the net USDC amount
+  // that the buyer pays (usdcTotal minus fee = netUsdc, but contract adds fee on
+  // top — so pass netUsdc here to avoid double-counting).
+  if (process.env.TRADING_VAULT_ADDRESS && process.env.EXCHANGE_BACKEND_KEY) {
+    const netUsdcForChain = (parseFloat(usdcTotal) - parseFloat(fee)).toFixed(6);
+    settleOnChain(buyerWallet, sellerWallet, netUsdcForChain, ethAmount).catch((err) => {
+      console.error(
+        `[vault] on-chain settle failed (buyer=${buyerWallet} seller=${sellerWallet}):`,
+        (err as Error).message,
+      );
+    });
   }
 }
