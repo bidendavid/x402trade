@@ -186,6 +186,33 @@ wss://api.getx402.trade/ws   →  $0.005 / connection
 { "type": "subscribe", "channel": "fills" }
 ```
 
+### Error Codes
+
+All errors return JSON: `{ "error": "message", "reason": "detail" }`
+
+| HTTP Status | When it happens | How to handle |
+|---|---|---|
+| `400 Bad Request` | Missing/invalid field (pair, side, amount, price) | Fix request body — check `error` field for details |
+| `401 Unauthorized` | API key invalid, expired, or revoked | Rotate key via `POST /api-key/create` |
+| `402 Payment Required` | Insufficient USDC balance | Deposit more funds via `POST /deposit` |
+| `403 Forbidden` | Read-only API key used on trade endpoint | Create a new key without read-only restriction |
+| `404 Not Found` | Wallet not registered / order not found | Deposit first to create account; check order ID |
+| `409 Conflict` | Nonce already used (replay attack) | Generate a new nonce — each request must have a unique nonce |
+| `429 Too Many Requests` | Rate limited (risk score too low) | Back off and retry; excessive cancellations lower your score |
+| `500 Internal Server Error` | Unexpected server error | Retry with exponential backoff |
+| `503 Service Unavailable` | Order engine or matching service down | Retry in a few seconds |
+
+**Agent risk score** (0–100) affects rate limits:
+
+| Score | Max requests/min |
+|---|---|
+| 80–100 | 120 |
+| 50–79 | 60 |
+| 30–49 | 20 |
+| 0–29 | 5 (effectively blocked) |
+
+Score increases +1 per filled trade, decreases −2 per cancelled order.
+
 ---
 
 ## Pricing

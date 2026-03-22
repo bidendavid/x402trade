@@ -140,19 +140,19 @@ describe('POST /trade', () => {
     const res = await agent
       .post('/trade')
       .set('x402-payment', 'dummy')
-      .send({ pair: 'ETH/USDC', side: 'buy', type: 'limit', amount: '1.0' });
+      .send({ pair: 'ETH-USDC', side: 'buy', type: 'limit', amount: '1.0' });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/price/i);
   });
 
   it('returns 200 with orderId for a valid limit order', async () => {
-    const orderResult = { orderId: 'order-uuid-123', status: 'pending', pair: 'ETH/USDC' };
+    const orderResult = { orderId: 'order-uuid-123', status: 'pending', pair: 'ETH-USDC' };
     mockNatsRequest.mockResolvedValueOnce(encodeNatsReply(orderResult));
 
     const res = await agent
       .post('/trade')
       .set('x402-payment', 'dummy')
-      .send({ pair: 'ETH/USDC', side: 'buy', type: 'limit', amount: '1.0', price: '3000.00' });
+      .send({ pair: 'ETH-USDC', side: 'buy', type: 'limit', amount: '1.0', price: '3000.00' });
 
     expect(res.status).toBe(200);
     expect(res.body.orderId).toBe('order-uuid-123');
@@ -160,13 +160,13 @@ describe('POST /trade', () => {
   });
 
   it('returns 200 with orderId for a valid market order (no price required)', async () => {
-    const orderResult = { orderId: 'order-uuid-456', status: 'filled', pair: 'ETH/USDC' };
+    const orderResult = { orderId: 'order-uuid-456', status: 'filled', pair: 'ETH-USDC' };
     mockNatsRequest.mockResolvedValueOnce(encodeNatsReply(orderResult));
 
     const res = await agent
       .post('/trade')
       .set('x402-payment', 'dummy')
-      .send({ pair: 'ETH/USDC', side: 'sell', type: 'market', amount: '0.5' });
+      .send({ pair: 'ETH-USDC', side: 'sell', type: 'market', amount: '0.5' });
 
     expect(res.status).toBe(200);
     expect(res.body.orderId).toBe('order-uuid-456');
@@ -178,7 +178,7 @@ describe('POST /trade', () => {
     const res = await agent
       .post('/trade')
       .set('x402-payment', 'dummy')
-      .send({ pair: 'ETH/USDC', side: 'buy', type: 'limit', amount: '1.0', price: '3000.00' });
+      .send({ pair: 'ETH-USDC', side: 'buy', type: 'limit', amount: '1.0', price: '3000.00' });
 
     expect(res.status).toBe(503);
     expect(res.body.error).toMatch(/unavailable/i);
@@ -202,11 +202,11 @@ describe('GET /orderbook', () => {
     redis.zrange    = jest.fn(async () => []);
 
     const res = await agent
-      .get('/orderbook?pair=ETH/USDC&depth=20')
+      .get('/orderbook?pair=ETH-USDC&depth=20')
       .set('x402-payment', 'dummy');
 
     expect(res.status).toBe(200);
-    expect(res.body.pair).toBe('ETH/USDC');
+    expect(res.body.pair).toBe('ETH-USDC');
     expect(Array.isArray(res.body.bids)).toBe(true);
     expect(Array.isArray(res.body.asks)).toBe(true);
     expect(typeof res.body.timestamp).toBe('number');
@@ -221,7 +221,7 @@ describe('GET /orderbook', () => {
     redis.hgetall   = jest.fn(async () => ({}));
 
     const res = await agent
-      .get('/orderbook?pair=ETH/USDC')
+      .get('/orderbook?pair=ETH-USDC')
       .set('x402-payment', 'dummy');
 
     expect(res.status).toBe(200);
@@ -312,11 +312,11 @@ describe('GET /ticker', () => {
     });
 
     const res = await agent
-      .get('/ticker?pair=ETH/USDC')
+      .get('/ticker?pair=ETH-USDC')
       .set('x402-payment', 'dummy');
 
     expect(res.status).toBe(200);
-    expect(res.body.pair).toBe('ETH/USDC');
+    expect(res.body.pair).toBe('ETH-USDC');
     expect(res.body.price).toBe('3000.00');
     expect(res.body.change24h).toBe('2.5');
     expect(res.body.volume24h).toBe('1500000');
@@ -326,7 +326,7 @@ describe('GET /ticker', () => {
   it('returns default zero values when no ticker data exists in Redis', async () => {
     // redis.get already returns null by default (mock store is empty)
     const res = await agent
-      .get('/ticker?pair=BTC/USDC')
+      .get('/ticker?pair=BTC-USDC')
       .set('x402-payment', 'dummy');
 
     expect(res.status).toBe(200);
@@ -346,16 +346,16 @@ describe('GET /trades', () => {
   });
 
   it('returns 200 with an array of trades', async () => {
-    const fakeTrade = { orderId: 'x', pair: 'ETH/USDC', price: '3000', amount: '0.1', side: 'buy' };
+    const fakeTrade = { orderId: 'x', pair: 'ETH-USDC', price: '3000', amount: '0.1', side: 'buy' };
     const redis = getRedis() as any;
     redis.lrange = jest.fn(async () => [JSON.stringify(fakeTrade)]);
 
     const res = await agent
-      .get('/trades?pair=ETH/USDC')
+      .get('/trades?pair=ETH-USDC')
       .set('x402-payment', 'dummy');
 
     expect(res.status).toBe(200);
-    expect(res.body.pair).toBe('ETH/USDC');
+    expect(res.body.pair).toBe('ETH-USDC');
     expect(Array.isArray(res.body.trades)).toBe(true);
     expect(res.body.trades[0].price).toBe('3000');
   });
@@ -366,7 +366,7 @@ describe('GET /orders', () => {
   it('returns 200 with orders array from DB', async () => {
     const fakeOrder = {
       order_id: 'order-1',
-      pair: 'ETH/USDC',
+      pair: 'ETH-USDC',
       side: 'buy',
       order_type: 'limit',
       amount: '1.0',
@@ -416,7 +416,7 @@ describe('DELETE /orders/:orderId', () => {
   it('returns 403 when order belongs to a different wallet', async () => {
     poolMock.query.mockResolvedValueOnce({
       rows: [{
-        order_id: 'order-1', pair: 'ETH/USDC', side: 'buy', order_type: 'limit',
+        order_id: 'order-1', pair: 'ETH-USDC', side: 'buy', order_type: 'limit',
         amount: '1.0', price: '3000.00', filled_amount: '0',
         status: 'pending',
         wallet_address: '0xother_wallet', // != '0xtest'
@@ -435,7 +435,7 @@ describe('DELETE /orders/:orderId', () => {
   it('returns 400 when order status is already filled', async () => {
     poolMock.query.mockResolvedValueOnce({
       rows: [{
-        order_id: 'order-2', pair: 'ETH/USDC', side: 'buy', order_type: 'limit',
+        order_id: 'order-2', pair: 'ETH-USDC', side: 'buy', order_type: 'limit',
         amount: '1.0', price: '3000.00', filled_amount: '1.0',
         status: 'filled',
         wallet_address: WALLET.toLowerCase(),
@@ -453,7 +453,7 @@ describe('DELETE /orders/:orderId', () => {
 
   it('returns 200 with cancelled status for a pending order', async () => {
     const pendingOrder = {
-      order_id: 'order-3', pair: 'ETH/USDC', side: 'buy', order_type: 'limit',
+      order_id: 'order-3', pair: 'ETH-USDC', side: 'buy', order_type: 'limit',
       amount: '1.0', price: '3000.00', filled_amount: '0',
       status: 'pending',
       wallet_address: WALLET.toLowerCase(),
