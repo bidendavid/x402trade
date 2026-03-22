@@ -54,14 +54,31 @@ services:
       retries: 10
     restart: unless-stopped
 
+  alertmanager:
+    image: prom/alertmanager:latest
+    volumes:
+      - ../../monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    ports:
+      - "127.0.0.1:9093:9093"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:latest
     volumes:
       - ../../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=15d'
+    depends_on:
+      - alertmanager
     ports:
       - "9090:9090"
     deploy:

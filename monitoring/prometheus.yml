@@ -2,23 +2,26 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
 scrape_configs:
   - job_name: x402-gateway
     static_configs:
-      - targets: ['x402-gateway:8080']
+      - targets: ['104.238.164.95:8080']
     metrics_path: /metrics
 
   - job_name: wallet-service
     static_configs:
-      - targets: ['wallet-service:8082']
+      - targets: ['104.238.164.95:8082']
     metrics_path: /metrics
 
-  - job_name: oracle-service
+  - job_name: background-worker
     static_configs:
-      - targets: ['oracle-service:8083']
-    metrics_path: /metrics
-
-  - job_name: risk-control
-    static_configs:
-      - targets: ['risk-control:8084']
+      - targets: ['104.238.164.95:8083']
     metrics_path: /metrics

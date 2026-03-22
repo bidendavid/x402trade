@@ -17,12 +17,19 @@ dotenv.config();
 
 import express, { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
+import { Registry, collectDefaultMetrics, Counter, Gauge } from 'prom-client';
 import { ethers } from 'ethers';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { connect, NatsConnection, StringCodec } from 'nats';
 
 // ── Shared infrastructure ──────────────────────────────────────────────────────
+
+const registry = new Registry();
+collectDefaultMetrics({ register: registry });
+const oracleFetchTotal = new Counter({ name: 'oracle_fetch_total', help: 'Total oracle price fetches', labelNames: ['status'], registers: [registry] });
+const riskCheckTotal = new Counter({ name: 'risk_check_total', help: 'Total risk checks', labelNames: ['result'], registers: [registry] });
+const agentScoreGauge = new Gauge({ name: 'risk_agents_blocked', help: 'Agents currently rate-limited or blacklisted', registers: [registry] });
 
 const DB_URL     = process.env.DB_URL     || 'postgresql://agent:agentpass@localhost:5432/agent_exchange';
 const NATS_URL   = process.env.NATS_URL   || 'nats://localhost:4222';
@@ -42,11 +49,13 @@ redis.on('error', (e) => console.error('[redis] error:', e.message));
 // ORACLE — price feeds
 // ── ─────────────────────────────────────────────────────────────────────────────
 
+// COINGECKO_IDS maps gateway pair name → CoinGecko id
+// Key format matches what the gateway reads: `price:ETH-USDC`, `price:BTC-USDC`
 const COINGECKO_IDS: Record<string, string> = {
-  WETH: 'ethereum', WBTC: 'wrapped-bitcoin',
-  USDT: 'tether',   LINK: 'chainlink', OP: 'optimism',
+  'ETH-USDC': 'ethereum',
+  'BTC-USDC': 'wrapped-bitcoin',
 };
-const PAIRS = ['USDC/WETH', 'USDC/WBTC', 'USDC/USDT', 'USDC/LINK', 'USDC/OP'];
+const PAIRS = Object.keys(COINGECKO_IDS);
 const priceHistory: Record<string, number[]> = {};
 
 async function fetchAndStorePrices(): Promise<void> {
@@ -61,14 +70,14 @@ async function fetchAndStorePrices(): Promise<void> {
     total_volume: number; high_24h: number; low_24h: number;
   }> = response.data;
 
-  const idToToken: Record<string, string> = {};
-  for (const [tok, id] of Object.entries(COINGECKO_IDS)) idToToken[id] = tok;
+  const idToPair: Record<string, string> = {};
+  for (const [pair, id] of Object.entries(COINGECKO_IDS)) idToPair[id] = pair;
 
   const pipe = redis.pipeline();
   for (const coin of coins) {
-    const token = idToToken[coin.id];
-    if (!token) continue;
-    const pk = `USDC-${token}`;
+    const pk = idToPair[coin.id];
+    if (!pk) continue;
+    {
     const price = coin.current_price;
 
     if (!priceHistory[pk]) priceHistory[pk] = [];
@@ -90,20 +99,21 @@ async function fetchAndStorePrices(): Promise<void> {
     pipe.set(`high24h:${pk}`, (coin.high_24h ?? price).toFixed(18));
     pipe.set(`low24h:${pk}`, (coin.low_24h ?? price).toFixed(18));
     pipe.publish(`price_update:${pk}`, JSON.stringify({ price: priceStr, change24h: (coin.price_change_percentage_24h ?? 0).toFixed(4) }));
+    }
   }
   await pipe.exec();
+  oracleFetchTotal.inc({ status: 'success' });
   console.log(`[oracle] prices updated ${new Date().toISOString()}`);
 }
 
 async function getPrices() {
   const result = [];
-  for (const pair of PAIRS) {
-    const pk = pair.replace('/', '-');
+  for (const pk of PAIRS) {
     const [price, change24h, volume24h, high24h, low24h] = await Promise.all([
       redis.get(`price:${pk}`), redis.get(`change24h:${pk}`),
       redis.get(`volume24h:${pk}`), redis.get(`high24h:${pk}`), redis.get(`low24h:${pk}`),
     ]);
-    result.push({ pair, price: price || '0', change24h: change24h || '0',
+    result.push({ pair: pk, price: price || '0', change24h: change24h || '0',
       volume24h: volume24h || '0', high24h: high24h || '0', low24h: low24h || '0', updatedAt: Date.now() });
   }
   return result;
@@ -248,6 +258,11 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'background-worker' });
 });
 
+app.get('/metrics', async (_req: Request, res: Response) => {
+  res.set('Content-Type', registry.contentType);
+  res.end(await registry.metrics());
+});
+
 // Oracle endpoints
 app.get('/prices', async (_req: Request, res: Response) => {
   try { res.json({ prices: await getPrices(), timestamp: Date.now() }); }
@@ -268,9 +283,10 @@ app.post('/check', async (req: Request, res: Response) => {
   if (!wallet) { res.status(400).json({ error: 'wallet required' }); return; }
   try {
     const [blacklisted, score] = await Promise.all([isBlacklisted(wallet), getScore(wallet)]);
-    if (blacklisted)  { res.json({ allowed: false, reason: 'blacklisted', score }); return; }
-    if (score < 30)   { res.json({ allowed: false, reason: 'score_too_low', score }); return; }
+    if (blacklisted)  { riskCheckTotal.inc({ result: 'blacklisted' }); agentScoreGauge.inc(); res.json({ allowed: false, reason: 'blacklisted', score }); return; }
+    if (score < 30)   { riskCheckTotal.inc({ result: 'score_too_low' }); res.json({ allowed: false, reason: 'score_too_low', score }); return; }
     const ok = await checkRateLimit(wallet, score);
+    riskCheckTotal.inc({ result: ok ? 'allowed' : 'rate_limited' });
     res.json(ok ? { allowed: true, score } : { allowed: false, reason: 'rate_limited', score });
   } catch (err) { console.error('[risk] /check error:', err); res.status(500).json({ allowed: false, reason: 'risk_service_error' }); }
 });

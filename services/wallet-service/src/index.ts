@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import express, { Request, Response } from 'express';
+import { Registry, collectDefaultMetrics, Counter, Histogram } from 'prom-client';
 import { connect, NatsConnection, StringCodec } from 'nats';
 import balanceRouter from './routes/balance';
 import depositRouter from './routes/deposit';
@@ -7,6 +8,12 @@ import withdrawRouter from './routes/withdraw';
 import { settleTradeTransaction, unlockBalance, unlockEthBalance } from './lib/ledger';
 
 dotenv.config();
+
+const registry = new Registry();
+collectDefaultMetrics({ register: registry });
+export const depositsTotal = new Counter({ name: 'wallet_deposits_total', help: 'Total deposits processed', registers: [registry] });
+export const withdrawalsTotal = new Counter({ name: 'wallet_withdrawals_total', help: 'Total withdrawals processed', registers: [registry] });
+export const settlementDuration = new Histogram({ name: 'wallet_settlement_duration_seconds', help: 'Trade settlement duration', registers: [registry] });
 
 const app = express();
 app.use(express.json());
@@ -17,6 +24,11 @@ app.use(withdrawRouter);
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'wallet-service' });
+});
+
+app.get('/metrics', async (_req: Request, res: Response) => {
+  res.set('Content-Type', registry.contentType);
+  res.end(await registry.metrics());
 });
 
 const PORT = process.env.WALLET_PORT || 8082;

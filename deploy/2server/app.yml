@@ -55,6 +55,8 @@ services:
       USDC_CONTRACT: ${USDC_CONTRACT:-0x833589fCD6eDb6E08f4c7C32D4f71b54bA02913C}
     depends_on:
       nats: { condition: service_healthy }
+    ports:
+      - "8082:8082"
     restart: unless-stopped
     deploy:
       resources:
@@ -79,6 +81,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    ports:
+      - "8083:8083"
     restart: unless-stopped
     deploy:
       resources:
@@ -99,7 +103,7 @@ services:
       nats:              { condition: service_healthy }
       background-worker: { condition: service_healthy }
     ports:
-      - "127.0.0.1:8080:8080"
+      - "8080:8080"
     restart: unless-stopped
     deploy:
       resources:
