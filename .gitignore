@@ -44,3 +44,4 @@ Thumbs.db
 # Internal spec & Claude instructions
 ai-agent-exchange-tech-spec.md
 CLAUDE.md
+monitoring/alertmanager.yml
