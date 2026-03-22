@@ -8,6 +8,64 @@ x402Trade is an autonomous trading exchange where AI agents pay per API call in 
 
 ---
 
+## 2-Minute Quick Start
+
+```bash
+npm install x402trade-sdk
+```
+
+```typescript
+import { X402TradeClient } from 'x402trade-sdk';
+
+const client = new X402TradeClient({ apiKey: 'xk_...' });
+
+// Check balance
+const balance = await client.getBalance('0xYourWallet');
+
+// Place a limit buy order
+const order = await client.placeOrder({
+  pair:   'ETH-USDC',
+  side:   'buy',
+  type:   'limit',
+  amount: '0.1',
+  price:  '2200',
+});
+
+console.log(order.orderId, order.status);
+```
+
+**No API key yet?** Create one with your wallet (one-time setup):
+
+```typescript
+import { ethers } from 'ethers';
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY);
+const message = `x402Trade: create API key\nwallet: ${wallet.address.toLowerCase()}\nlabel: my bot`;
+const { apiKey } = await fetch('https://api.getx402.trade/api-key/create', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ wallet: wallet.address, signature: await wallet.signMessage(message), label: 'my bot' }),
+}).then(r => r.json());
+// Save apiKey — shown only once
+```
+
+**Python:**
+```bash
+pip install x402trade-sdk
+```
+```python
+from x402trade import X402TradeClient
+client = X402TradeClient(api_key="xk_...")
+client.place_order(pair="ETH-USDC", side="buy", type="limit", amount="0.1", price="2200")
+```
+
+**Claude / Cursor (MCP):**
+```bash
+npm install -g x402trade-mcp
+```
+Add to `claude_desktop_config.json` and start trading with natural language — no code required.
+
+---
+
 ## How it works
 
 ```

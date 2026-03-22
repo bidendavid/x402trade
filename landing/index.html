@@ -484,6 +484,7 @@
       <ul class="nav-links">
         <li><a href="https://github.com/bidendavid/x402trade">DOCS</a></li>
         <li><a href="#api">API</a></li>
+        <li><a href="#mcp">MCP</a></li>
         <li><a href="#pricing">PRICING</a></li>
         <li><a href="https://github.com/bidendavid/x402trade">GITHUB</a></li>
       </ul>
@@ -584,8 +585,9 @@
         <p>Works with ethers.js, viem, web3.py — any library that can sign an Ethereum message.</p>
         <div class="code-compat">
           <div class="compat-item">TypeScript / JavaScript SDK</div>
-          <div class="compat-item">Python client library coming soon</div>
-          <div class="compat-item">Raw HTTP — any tool, any language</div>
+          <div class="compat-item">Python SDK</div>
+          <div class="compat-item">MCP Server (Claude / Cursor)</div>
+          <div class="compat-item">Raw HTTP — any language</div>
         </div>
       </div>
       <div class="code-block">
@@ -673,6 +675,54 @@
           </tr>
         </tbody>
       </table>
+    </div>
+    </div>
+  </section>
+
+  <!-- MCP -->
+  <section id="mcp" style="background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="container">
+    <div class="code-section">
+      <div class="code-text">
+        <div class="section-label">MCP SERVER</div>
+        <h2>Trade From Claude or Cursor.<br/>Zero Code.</h2>
+        <p>x402Trade ships a native MCP Server. Connect it to Claude Desktop or Cursor — your AI assistant can check balances, place orders, and read the order book directly.</p>
+        <div class="code-compat" style="margin-top: 24px;">
+          <div class="compat-item">Claude Desktop</div>
+          <div class="compat-item">Cursor</div>
+          <div class="compat-item">Any MCP-compatible agent</div>
+        </div>
+        <div style="margin-top: 32px;">
+          <a href="https://www.npmjs.com/package/x402trade-mcp" class="btn btn-outline" style="padding: 12px 28px; font-size: 12px; display: inline-block;">VIEW ON NPM →</a>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-topbar">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-gray"></div>
+          <div class="dot dot-gray"></div>
+          <span class="code-topbar-label">claude_desktop_config.json</span>
+        </div>
+        <pre><span class="c-comment">// Step 1: install</span>
+<span class="c-keyword">npm</span> install -g x402trade-mcp
+
+<span class="c-comment">// Step 2: add to claude_desktop_config.json</span>
+{
+  <span class="c-key">"mcpServers"</span>: {
+    <span class="c-key">"x402trade"</span>: {
+      <span class="c-key">"command"</span>: <span class="c-string">"x402trade-mcp"</span>,
+      <span class="c-key">"env"</span>: {
+        <span class="c-key">"PRIVATE_KEY"</span>: <span class="c-string">"0x..."</span>
+      }
+    }
+  }
+}
+
+<span class="c-comment">// Step 3: ask Claude</span>
+<span class="c-string">"What's the ETH-USDC price?"</span>
+<span class="c-string">"Buy 0.1 ETH at market price"</span>
+<span class="c-string">"Show my open orders"</span></pre>
+      </div>
     </div>
     </div>
   </section>
