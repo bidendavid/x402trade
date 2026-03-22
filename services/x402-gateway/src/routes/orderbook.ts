@@ -24,7 +24,7 @@ router.get('/orderbook', async (req: Request, res: Response) => {
       redis.zrange(`asks:${pk}`, 0, depth - 1),
     ]);
 
-    // For each member, look up the order hash to get actual remaining amount
+    // Resolve each order's remaining amount, then aggregate by price level
     const resolve = async (members: string[]): Promise<[string, string][]> => {
       const entries = await Promise.all(
         members.map(async (m) => {
@@ -39,7 +39,13 @@ router.get('/orderbook', async (req: Request, res: Response) => {
           return [price, remaining] as [string, string];
         })
       );
-      return entries.filter(([, rem]) => parseFloat(rem) > 0);
+      // Aggregate by price level
+      const agg = new Map<string, number>();
+      for (const [price, rem] of entries) {
+        const r = parseFloat(rem);
+        if (r > 0) agg.set(price, (agg.get(price) ?? 0) + r);
+      }
+      return Array.from(agg.entries()).map(([p, v]) => [p, v.toFixed(6)]);
     };
 
     const [bids, asks] = await Promise.all([resolve(bidMembers), resolve(askMembers)]);

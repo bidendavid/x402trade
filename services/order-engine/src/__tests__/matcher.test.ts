@@ -87,10 +87,10 @@ describe('matchOrder — no resting orders', () => {
     expect(lockForSell).toHaveBeenCalledWith(order.agentWallet, '2.0');
   });
 
-  it('market buy: stays pending with no asks', async () => {
+  it('market buy: cancelled with no asks (IOC behaviour)', async () => {
     const order = makeOrder({ side: 'buy', type: 'market', price: '0' });
     const result = await matchOrder(order);
-    expect(result.status).toBe('pending');
+    expect(result.status).toBe('cancelled');
     expect(result.trades).toHaveLength(0);
   });
 });
